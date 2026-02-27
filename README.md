@@ -1,4 +1,4 @@
-# Uptime Monitor
+# Free Uptime Monitor for Cloudflare Workers
 
 A free, open-source uptime monitoring tool that runs entirely on **Cloudflare Workers**. It auto-discovers all domains on your Cloudflare account and monitors them, with alerts via Telegram and email.
 
