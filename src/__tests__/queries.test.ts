@@ -186,19 +186,19 @@ describe('getDownMonitors', () => {
 });
 
 describe('cleanOldChecks', () => {
-  it('removes checks and resolved incidents older than 30 days', async () => {
+  it('removes checks and resolved incidents older than 7 days', async () => {
     const id = await insertMonitor(env.DB, 'https://old.com', 'Old');
 
     // Insert old check
     await env.DB.prepare(
-      "INSERT INTO checks (monitor_id, status_code, response_ms, is_up, checked_at) VALUES (?, 200, 100, 1, datetime('now', '-31 days'))"
+      "INSERT INTO checks (monitor_id, status_code, response_ms, is_up, checked_at) VALUES (?, 200, 100, 1, datetime('now', '-8 days'))"
     ).bind(id).run();
     // Insert recent check
     await insertCheck(testEnv, id, 200, 100, true, null);
 
     // Insert old resolved incident
     await env.DB.prepare(
-      "INSERT INTO incidents (monitor_id, started_at, resolved_at, notified_down, notified_up) VALUES (?, datetime('now', '-35 days'), datetime('now', '-31 days'), 1, 1)"
+      "INSERT INTO incidents (monitor_id, started_at, resolved_at, notified_down, notified_up) VALUES (?, datetime('now', '-10 days'), datetime('now', '-8 days'), 1, 1)"
     ).bind(id).run();
 
     await cleanOldChecks(testEnv);

@@ -17,7 +17,7 @@ A free, open-source uptime monitoring tool that runs entirely on **Cloudflare Wo
 - **Incident tracking** — logs downtime periods with duration
 - **Edit, pause, delete** — full control over each monitor from the dashboard
 - **Down-first sorting** — down monitors always appear at the top
-- **30-day retention** — automatic cleanup of old data
+- **7-day retention** — automatic cleanup of old data
 
 ## Quick Setup
 
@@ -127,7 +127,7 @@ Visit `http://localhost:8787` to see the dashboard.
 |------|----------|---------|
 | `* * * * *` | Every minute | Re-check down monitors; full check every 5th minute |
 | `0 */6 * * *` | Every 6 hours | Re-sync domains from Cloudflare API |
-| `0 3 * * *` | Daily at 3 AM UTC | Purge data older than 30 days |
+| `0 3 * * *` | Daily at 3 AM UTC | Purge data older than 7 days |
 
 ### Alert Logic
 

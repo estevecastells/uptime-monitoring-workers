@@ -98,9 +98,9 @@ export async function getDownMonitors(env: Env): Promise<Monitor[]> {
 
 export async function cleanOldChecks(env: Env): Promise<void> {
   await env.DB.prepare(
-    "DELETE FROM checks WHERE checked_at < datetime('now', '-30 days')"
+    "DELETE FROM checks WHERE checked_at < datetime('now', '-7 days')"
   ).run();
   await env.DB.prepare(
-    "DELETE FROM incidents WHERE resolved_at IS NOT NULL AND resolved_at < datetime('now', '-30 days')"
+    "DELETE FROM incidents WHERE resolved_at IS NOT NULL AND resolved_at < datetime('now', '-7 days')"
   ).run();
 }
