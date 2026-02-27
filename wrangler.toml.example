@@ -12,5 +12,5 @@ crons = [
 [[d1_databases]]
 binding = "DB"
 database_name = "uptime-monitor-db"
-database_id = "your-database-id-here"
+database_id = "your-database-id-here"  # Run: npx wrangler d1 create uptime-monitor-db
 migrations_dir = "migrations"

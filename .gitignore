@@ -9,6 +9,7 @@ node_modules/
 # Cloudflare
 .wrangler/
 dist/
+wrangler.toml
 
 # OS
 .DS_Store

@@ -33,6 +33,7 @@ A free, open-source uptime monitoring tool that runs entirely on **Cloudflare Wo
 ```bash
 git clone https://github.com/estevecastells/uptime-monitoring-workers.git
 cd uptime-monitoring-workers
+cp wrangler.toml.example wrangler.toml
 npm install
 ```
 
@@ -42,7 +43,7 @@ npm install
 npx wrangler d1 create uptime-monitor-db
 ```
 
-Copy the `database_id` from the output and paste it into `wrangler.toml`:
+Copy the `database_id` from the output and paste it into your `wrangler.toml`:
 
 ```toml
 [[d1_databases]]
