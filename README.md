@@ -170,6 +170,10 @@ Visit `http://localhost:8787` to see the dashboard.
 
 Comfortably supports up to **~200 monitors** on the free tier.
 
+## Contributing
+
+Contributions are welcome! Feel free to open issues, submit pull requests, or fork the project for your own use. Whether it's bug fixes, new features, documentation improvements, or ideas — all contributions are appreciated.
+
 ## License
 
-MIT
+MIT — free and open source. Use it however you want, including commercially. Fork it, modify it, sell it, deploy it for your clients — no restrictions beyond the MIT license terms.
