@@ -1,0 +1,24 @@
+# Secrets - NEVER commit these
+.env
+.env.*
+.dev.vars
+
+# Dependencies
+node_modules/
+
+# Cloudflare
+.wrangler/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log

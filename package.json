@@ -1,0 +1,19 @@
+{
+  "name": "uptime-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create uptime-monitor-db",
+    "db:migrate": "wrangler d1 migrations apply uptime-monitor-db",
+    "db:migrate:local": "wrangler d1 migrations apply uptime-monitor-db --local"
+  },
+  "dependencies": {
+    "hono": "^4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4",
+    "wrangler": "^3"
+  }
+}
