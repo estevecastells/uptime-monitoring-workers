@@ -170,9 +170,27 @@ Visit `http://localhost:8787` to see the dashboard.
 
 Comfortably supports up to **~200 monitors** on the free tier.
 
+## Tests
+
+Run the test suite before submitting a PR:
+
+```bash
+npm test
+```
+
+Tests use [Vitest](https://vitest.dev/) with Cloudflare's Workers test pool, so they run against a real D1 database in a local Workers runtime. The suite covers:
+
+- **DB queries** — CRUD operations, soft-delete, stats, cleanup
+- **Health checker** — check logic, incident creation after 2 failures, recovery
+- **API routes** — auth, monitor CRUD, toggle, validation
+- **Notifications** — Telegram and email payload formatting
+- **Zone discovery** — sync, deactivation, soft-delete protection
+
 ## Contributing
 
 Contributions are welcome! Feel free to open issues, submit pull requests, or fork the project for your own use. Whether it's bug fixes, new features, documentation improvements, or ideas — all contributions are appreciated.
+
+Please run `npm test` and make sure all tests pass before submitting a PR.
 
 ## License
 

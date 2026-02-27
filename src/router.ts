@@ -112,7 +112,13 @@ app.delete('/api/monitors/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
 
-  await c.env.DB.prepare('DELETE FROM monitors WHERE id = ?').bind(id).run();
+  // Soft-delete: mark as deleted so zone sync won't re-add it
+  await c.env.DB.prepare(
+    "UPDATE monitors SET deleted_at = datetime('now'), is_active = 0 WHERE id = ?"
+  ).bind(id).run();
+  // Clean up related data
+  await c.env.DB.prepare('DELETE FROM checks WHERE monitor_id = ?').bind(id).run();
+  await c.env.DB.prepare('DELETE FROM incidents WHERE monitor_id = ?').bind(id).run();
   return c.json({ ok: true });
 });
 

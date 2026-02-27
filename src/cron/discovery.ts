@@ -37,25 +37,26 @@ export async function syncZones(env: Env): Promise<void> {
     page++;
   }
 
-  // Upsert each domain
+  // Upsert each domain — skip any that were manually deleted
   for (const domain of allDomains) {
     await env.DB.prepare(
       `INSERT INTO monitors (url, name, source) VALUES (?, ?, 'auto')
-       ON CONFLICT(url) DO UPDATE SET name = excluded.name, updated_at = datetime('now')`
+       ON CONFLICT(url) DO UPDATE SET name = excluded.name, updated_at = datetime('now')
+       WHERE deleted_at IS NULL`
     ).bind(domain.url, domain.name).run();
   }
 
-  // Deactivate auto-discovered monitors whose zones no longer exist
+  // Deactivate auto-discovered monitors whose zones no longer exist (only non-deleted ones)
   if (allDomains.length > 0) {
     const urls = allDomains.map(d => d.url);
     const placeholders = urls.map(() => '?').join(',');
     await env.DB.prepare(
-      `UPDATE monitors SET is_active = 0 WHERE source = 'auto' AND url NOT IN (${placeholders})`
+      `UPDATE monitors SET is_active = 0 WHERE source = 'auto' AND deleted_at IS NULL AND url NOT IN (${placeholders})`
     ).bind(...urls).run();
 
-    // Re-activate auto monitors that are back
+    // Re-activate auto monitors that are back (only non-deleted ones)
     await env.DB.prepare(
-      `UPDATE monitors SET is_active = 1 WHERE source = 'auto' AND url IN (${placeholders})`
+      `UPDATE monitors SET is_active = 1 WHERE source = 'auto' AND deleted_at IS NULL AND url IN (${placeholders})`
     ).bind(...urls).run();
   }
 }

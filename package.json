@@ -7,13 +7,17 @@
     "deploy": "wrangler deploy",
     "db:create": "wrangler d1 create uptime-monitor-db",
     "db:migrate": "wrangler d1 migrations apply uptime-monitor-db",
-    "db:migrate:local": "wrangler d1 migrations apply uptime-monitor-db --local"
+    "db:migrate:local": "wrangler d1 migrations apply uptime-monitor-db --local",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "hono": "^4"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.7.8",
     "@cloudflare/workers-types": "^4",
+    "vitest": "^3.0.9",
     "wrangler": "^3"
   }
 }

@@ -33,12 +33,17 @@ async function checkSingle(env: Env, monitor: Monitor): Promise<void> {
 
   const start = Date.now();
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
     const resp = await fetch(monitor.url, {
       method: 'GET',
       redirect: 'follow',
-      signal: AbortSignal.timeout(10_000),
+      signal: controller.signal,
       headers: { 'User-Agent': 'UptimeBot/1.0' },
     });
+    clearTimeout(timeout);
+    // Drain the body to avoid hanging connections in Workers
+    await resp.arrayBuffer().catch(() => {});
     responseMs = Date.now() - start;
     statusCode = resp.status;
     isUp = resp.status >= 200 && resp.status < 400;

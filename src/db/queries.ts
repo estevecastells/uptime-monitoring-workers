@@ -2,14 +2,14 @@ import type { Env, Monitor, Check, Incident, MonitorStats } from '../types';
 
 export async function getActiveMonitors(env: Env): Promise<Monitor[]> {
   const result = await env.DB.prepare(
-    'SELECT * FROM monitors WHERE is_active = 1 ORDER BY name'
+    'SELECT * FROM monitors WHERE is_active = 1 AND deleted_at IS NULL ORDER BY name'
   ).all<Monitor>();
   return result.results;
 }
 
 export async function getAllMonitors(env: Env): Promise<Monitor[]> {
   const result = await env.DB.prepare(
-    'SELECT * FROM monitors ORDER BY name'
+    'SELECT * FROM monitors WHERE deleted_at IS NULL ORDER BY name'
   ).all<Monitor>();
   return result.results;
 }
@@ -72,7 +72,7 @@ export async function getMonitorStats(env: Env): Promise<MonitorStats[]> {
       (SELECT response_ms FROM checks c WHERE c.monitor_id = m.id ORDER BY c.checked_at DESC LIMIT 1) as last_response_ms,
       (SELECT is_up FROM checks c WHERE c.monitor_id = m.id ORDER BY c.checked_at DESC LIMIT 1) as current_status
     FROM monitors m
-    WHERE m.is_active = 1
+    WHERE m.is_active = 1 AND m.deleted_at IS NULL
     ORDER BY
       CASE WHEN (SELECT is_up FROM checks c WHERE c.monitor_id = m.id ORDER BY c.checked_at DESC LIMIT 1) = 0 THEN 0 ELSE 1 END,
       m.name
@@ -90,7 +90,7 @@ export async function getMonitorIncidents(env: Env, monitorId: number, limit = 2
 export async function getDownMonitors(env: Env): Promise<Monitor[]> {
   const result = await env.DB.prepare(`
     SELECT m.* FROM monitors m
-    WHERE m.is_active = 1
+    WHERE m.is_active = 1 AND m.deleted_at IS NULL
     AND (SELECT is_up FROM checks c WHERE c.monitor_id = m.id ORDER BY c.checked_at DESC LIMIT 1) = 0
   `).all<Monitor>();
   return result.results;
