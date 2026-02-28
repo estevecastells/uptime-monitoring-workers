@@ -107,9 +107,13 @@ export async function renderDetail(env: Env, id: number): Promise<string> {
       <div class="uptime-bar">${segments.join('')}</div>
     </div>
 
-    <div class="card" style="margin-top: 12px;">
+    <div class="card" style="margin-top: 12px; position: relative;">
       <div style="color: #a3a3a3; font-size: 13px; margin-bottom: 12px;">Response Time (last 50 checks)</div>
       <canvas id="chart" height="160"></canvas>
+      <div id="tooltip" style="display:none; position:absolute; background:#1a1a1a; border:1px solid #404040; border-radius:6px; padding:6px 10px; font-size:12px; color:#e5e5e5; pointer-events:none; white-space:nowrap; z-index:10;">
+        <div id="ttTime" style="color:#737373; margin-bottom:2px;"></div>
+        <div><span style="color:#60a5fa; font-weight:600;" id="ttVal"></span></div>
+      </div>
     </div>
 
     <h2 style="margin-top: 24px;">Recent Incidents</h2>
@@ -190,6 +194,73 @@ export async function renderDetail(env: Env, id: number): Promise<string> {
         ctx.closePath();
         ctx.fillStyle = 'rgba(96, 165, 250, 0.08)';
         ctx.fill();
+
+        // Hover tooltip
+        const canvas = ctx.canvas;
+        const tooltip = document.getElementById('tooltip');
+        const ttTime = document.getElementById('ttTime');
+        const ttVal = document.getElementById('ttVal');
+        canvas.addEventListener('mousemove', function(e) {
+          const rect = canvas.getBoundingClientRect();
+          const mx = e.clientX - rect.left;
+          const idx = Math.round((mx - 50) / step);
+          if (idx >= 0 && idx < data.length) {
+            ttTime.textContent = labels[idx];
+            ttVal.textContent = data[idx] + ' ms';
+            tooltip.style.display = 'block';
+            const tx = 50 + idx * step;
+            const ty = h - 10 - ((data[idx] / max) * (h - 30));
+            tooltip.style.left = Math.min(tx + 8, w - 100) + 'px';
+            tooltip.style.top = Math.max(ty - 44, 0) + 'px';
+
+            // Draw crosshair dot
+            ctx.clearRect(0, 0, w, h);
+            // Redraw grid
+            ctx.strokeStyle = '#262626'; ctx.lineWidth = 1;
+            for (var gi = 0; gi < 4; gi++) {
+              var gy = (h / 4) * gi + 10;
+              ctx.beginPath(); ctx.moveTo(40, gy); ctx.lineTo(w, gy); ctx.stroke();
+              ctx.fillStyle = '#525252'; ctx.font = '11px system-ui';
+              ctx.fillText(Math.round(max - (max / 4) * gi) + 'ms', 0, gy + 4);
+            }
+            // Redraw line
+            ctx.beginPath(); ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2;
+            data.forEach(function(v, i) {
+              var x = 50 + i * step, y = h - 10 - ((v / max) * (h - 30));
+              if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            ctx.lineTo(50 + (data.length - 1) * step, h - 10);
+            ctx.lineTo(50, h - 10); ctx.closePath();
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.08)'; ctx.fill();
+            // Draw dot
+            ctx.beginPath();
+            ctx.arc(tx, ty, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#60a5fa'; ctx.fill();
+            ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 2; ctx.stroke();
+          }
+        });
+        canvas.addEventListener('mouseleave', function() {
+          tooltip.style.display = 'none';
+          // Redraw without dot
+          ctx.clearRect(0, 0, w, h);
+          ctx.strokeStyle = '#262626'; ctx.lineWidth = 1;
+          for (var gi = 0; gi < 4; gi++) {
+            var gy = (h / 4) * gi + 10;
+            ctx.beginPath(); ctx.moveTo(40, gy); ctx.lineTo(w, gy); ctx.stroke();
+            ctx.fillStyle = '#525252'; ctx.font = '11px system-ui';
+            ctx.fillText(Math.round(max - (max / 4) * gi) + 'ms', 0, gy + 4);
+          }
+          ctx.beginPath(); ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2;
+          data.forEach(function(v, i) {
+            var x = 50 + i * step, y = h - 10 - ((v / max) * (h - 30));
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+          ctx.lineTo(50 + (data.length - 1) * step, h - 10);
+          ctx.lineTo(50, h - 10); ctx.closePath();
+          ctx.fillStyle = 'rgba(96, 165, 250, 0.08)'; ctx.fill();
+        });
       }
     })();
     </script>
