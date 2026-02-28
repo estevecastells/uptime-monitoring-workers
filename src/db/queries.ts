@@ -97,11 +97,23 @@ export async function getDownMonitors(env: Env): Promise<Monitor[]> {
   return result.results;
 }
 
-export async function cleanOldChecks(env: Env): Promise<void> {
+export async function getSetting(env: Env, key: string): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first<{ value: string }>();
+  return row?.value ?? null;
+}
+
+export async function setSetting(env: Env, key: string, value: string): Promise<void> {
   await env.DB.prepare(
-    "DELETE FROM checks WHERE checked_at < datetime('now', '-7 days')"
+    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  ).bind(key, value).run();
+}
+
+export async function cleanOldChecks(env: Env): Promise<void> {
+  const days = parseInt(await getSetting(env, 'retention_days') || '7') || 7;
+  await env.DB.prepare(
+    `DELETE FROM checks WHERE checked_at < datetime('now', '-${days} days')`
   ).run();
   await env.DB.prepare(
-    "DELETE FROM incidents WHERE resolved_at IS NOT NULL AND resolved_at < datetime('now', '-7 days')"
+    `DELETE FROM incidents WHERE resolved_at IS NOT NULL AND resolved_at < datetime('now', '-${days} days')`
   ).run();
 }

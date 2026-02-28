@@ -1,9 +1,10 @@
 import type { Env } from '../types';
-import { getAllMonitors } from '../db/queries';
+import { getAllMonitors, getSetting } from '../db/queries';
 import { layout } from './layout';
 
 export async function renderSettings(env: Env): Promise<string> {
   const monitors = await getAllMonitors(env);
+  const retentionDays = parseInt(await getSetting(env, 'retention_days') || '7') || 7;
 
   const rows = monitors.length > 0
     ? monitors
@@ -40,6 +41,23 @@ export async function renderSettings(env: Env): Promise<string> {
         </div>
       </form>
       <div id="formMsg" style="margin-top: 8px; font-size: 13px;"></div>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <h2 style="margin-bottom: 12px;">Data Retention</h2>
+      <div class="form-row">
+        <select id="retention" style="max-width: 200px;">
+          <option value="1"${retentionDays === 1 ? ' selected' : ''}>1 day</option>
+          <option value="3"${retentionDays === 3 ? ' selected' : ''}>3 days</option>
+          <option value="7"${retentionDays === 7 ? ' selected' : ''}>7 days</option>
+          <option value="14"${retentionDays === 14 ? ' selected' : ''}>14 days</option>
+          <option value="30"${retentionDays === 30 ? ' selected' : ''}>30 days</option>
+          <option value="60"${retentionDays === 60 ? ' selected' : ''}>60 days</option>
+          <option value="90"${retentionDays === 90 ? ' selected' : ''}>90 days</option>
+        </select>
+        <button onclick="saveRetention()">Save</button>
+      </div>
+      <div id="retentionMsg" style="margin-top: 8px; font-size: 13px;"></div>
     </div>
 
     <div class="flex-between" style="margin-bottom: 16px;">
@@ -93,6 +111,28 @@ export async function renderSettings(env: Env): Promise<string> {
       if (!confirm('Delete this monitor?')) return;
       await fetch('/api/monitors/' + id, { method: 'DELETE' });
       location.reload();
+    }
+
+    async function saveRetention() {
+      const days = parseInt(document.getElementById('retention').value);
+      const rmsg = document.getElementById('retentionMsg');
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ retention_days: days }),
+        });
+        if (res.ok) {
+          rmsg.textContent = 'Saved! Data older than ' + days + ' days will be purged at next cleanup.';
+          rmsg.style.color = '#4ade80';
+        } else {
+          rmsg.textContent = 'Failed to save';
+          rmsg.style.color = '#f87171';
+        }
+      } catch {
+        rmsg.textContent = 'Network error';
+        rmsg.style.color = '#f87171';
+      }
     }
 
     async function syncZones() {

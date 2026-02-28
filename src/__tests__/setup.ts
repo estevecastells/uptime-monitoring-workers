@@ -28,6 +28,14 @@ export async function applyMigrations(): Promise<void> {
   await env.DB.exec(
     'CREATE INDEX IF NOT EXISTS idx_incidents_monitor ON incidents(monitor_id, resolved_at);'
   );
+
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+  );
+
+  await env.DB.exec(
+    "INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_days', '7');"
+  );
 }
 
 /** Clear all tables between tests */
@@ -35,6 +43,7 @@ export async function resetDB(): Promise<void> {
   await env.DB.exec('DELETE FROM incidents;');
   await env.DB.exec('DELETE FROM checks;');
   await env.DB.exec('DELETE FROM monitors;');
+  await env.DB.exec("DELETE FROM settings; INSERT INTO settings (key, value) VALUES ('retention_days', '7');");
 }
 
 /** Insert a monitor and return its id */

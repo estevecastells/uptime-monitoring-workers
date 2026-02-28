@@ -5,7 +5,7 @@ import { renderDashboard } from './ui/dashboard';
 import { renderDetail } from './ui/detail';
 import { renderSettings } from './ui/settings';
 import { renderLogin } from './ui/login';
-import { getAllMonitors } from './db/queries';
+import { getAllMonitors, getSetting, setSetting } from './db/queries';
 import { getMonitorStats, getRecentChecks } from './db/queries';
 import { syncZones } from './cron/discovery';
 
@@ -182,6 +182,20 @@ app.get('/api/stats', async (c) => {
 
 app.post('/api/sync-zones', async (c) => {
   await syncZones(c.env);
+  return c.json({ ok: true });
+});
+
+app.get('/api/settings', async (c) => {
+  const retentionDays = await getSetting(c.env, 'retention_days') || '7';
+  return c.json({ retention_days: parseInt(retentionDays) });
+});
+
+app.put('/api/settings', async (c) => {
+  const body = await c.req.json<{ retention_days?: number }>();
+  if (body.retention_days !== undefined) {
+    const days = Math.max(1, Math.min(90, Math.round(body.retention_days)));
+    await setSetting(c.env, 'retention_days', String(days));
+  }
   return c.json({ ok: true });
 });
 

@@ -15,6 +15,8 @@ import {
   getMonitorIncidents,
   getDownMonitors,
   cleanOldChecks,
+  getSetting,
+  setSetting,
 } from '../db/queries';
 
 const testEnv = env as unknown as import('../types').Env;
@@ -208,5 +210,46 @@ describe('cleanOldChecks', () => {
 
     const incidents = await getMonitorIncidents(testEnv, id);
     expect(incidents).toHaveLength(0); // Old resolved incident removed
+  });
+
+  it('respects configurable retention setting', async () => {
+    const id = await insertMonitor(env.DB, 'https://retain.com', 'Retain');
+
+    // Insert a 20-day-old check
+    await env.DB.prepare(
+      "INSERT INTO checks (monitor_id, status_code, response_ms, is_up, checked_at) VALUES (?, 200, 100, 1, datetime('now', '-20 days'))"
+    ).bind(id).run();
+
+    // Set retention to 30 days — the 20-day-old check should survive
+    await setSetting(testEnv, 'retention_days', '30');
+    await cleanOldChecks(testEnv);
+
+    let checks = await getRecentChecks(testEnv, id, 100);
+    expect(checks).toHaveLength(1); // Still there
+
+    // Set retention to 14 days — now it should be removed
+    await setSetting(testEnv, 'retention_days', '14');
+    await cleanOldChecks(testEnv);
+
+    checks = await getRecentChecks(testEnv, id, 100);
+    expect(checks).toHaveLength(0); // Cleaned up
+  });
+});
+
+describe('Settings', () => {
+  it('getSetting returns default value', async () => {
+    const val = await getSetting(testEnv, 'retention_days');
+    expect(val).toBe('7');
+  });
+
+  it('setSetting updates and getSetting retrieves', async () => {
+    await setSetting(testEnv, 'retention_days', '30');
+    const val = await getSetting(testEnv, 'retention_days');
+    expect(val).toBe('30');
+  });
+
+  it('getSetting returns null for unknown key', async () => {
+    const val = await getSetting(testEnv, 'nonexistent');
+    expect(val).toBeNull();
   });
 });
