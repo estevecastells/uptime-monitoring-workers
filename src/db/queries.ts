@@ -75,6 +75,7 @@ export async function getMonitorStats(env: Env): Promise<MonitorStats[]> {
     WHERE m.is_active = 1 AND m.deleted_at IS NULL
     ORDER BY
       CASE WHEN (SELECT is_up FROM checks c WHERE c.monitor_id = m.id ORDER BY c.checked_at DESC LIMIT 1) = 0 THEN 0 ELSE 1 END,
+      CASE WHEN total_24h > 0 THEN CAST(up_24h AS REAL) / total_24h ELSE 1.0 END ASC,
       m.name
   `).all<MonitorStats>();
   return result.results;
