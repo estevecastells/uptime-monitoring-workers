@@ -101,4 +101,25 @@ describe('syncZones', () => {
     row = await env.DB.prepare("SELECT is_active FROM monitors WHERE url = 'https://temp.com'").first<{ is_active: number }>();
     expect(row!.is_active).toBe(1);
   });
+
+  it('does NOT re-activate user-paused monitors', async () => {
+    mockCFZonesResponse(['paused.com', 'active.com']);
+    await syncZones(testEnv);
+
+    // User manually pauses paused.com
+    await env.DB.prepare(
+      "UPDATE monitors SET is_active = 0, user_paused = 1 WHERE url = 'https://paused.com'"
+    ).run();
+
+    // Re-sync — both zones still exist
+    mockCFZonesResponse(['paused.com', 'active.com']);
+    await syncZones(testEnv);
+
+    // paused.com should remain paused
+    const row = await env.DB.prepare(
+      "SELECT is_active, user_paused FROM monitors WHERE url = 'https://paused.com'"
+    ).first<{ is_active: number; user_paused: number }>();
+    expect(row!.is_active).toBe(0);
+    expect(row!.user_paused).toBe(1);
+  });
 });

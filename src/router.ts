@@ -155,7 +155,11 @@ app.post('/api/monitors/:id/toggle', async (c) => {
   if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
 
   await c.env.DB.prepare(
-    'UPDATE monitors SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END, updated_at = datetime(\'now\') WHERE id = ?'
+    `UPDATE monitors SET
+      is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END,
+      user_paused = CASE WHEN is_active = 1 THEN 1 ELSE 0 END,
+      updated_at = datetime('now')
+    WHERE id = ?`
   )
     .bind(id)
     .run();

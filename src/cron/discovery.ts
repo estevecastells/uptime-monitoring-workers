@@ -54,9 +54,9 @@ export async function syncZones(env: Env): Promise<void> {
       `UPDATE monitors SET is_active = 0 WHERE source = 'auto' AND deleted_at IS NULL AND url NOT IN (${placeholders})`
     ).bind(...urls).run();
 
-    // Re-activate auto monitors that are back (only non-deleted ones)
+    // Re-activate auto monitors whose zones are back — only if not manually paused by user
     await env.DB.prepare(
-      `UPDATE monitors SET is_active = 1 WHERE source = 'auto' AND deleted_at IS NULL AND url IN (${placeholders})`
+      `UPDATE monitors SET is_active = 1 WHERE source = 'auto' AND deleted_at IS NULL AND user_paused = 0 AND url IN (${placeholders})`
     ).bind(...urls).run();
   }
 }

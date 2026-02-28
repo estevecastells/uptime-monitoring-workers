@@ -6,7 +6,7 @@ import { env } from 'cloudflare:test';
  */
 export async function applyMigrations(): Promise<void> {
   await env.DB.exec(
-    "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT NOT NULL UNIQUE, name TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'auto', is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT DEFAULT NULL);"
+    "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT NOT NULL UNIQUE, name TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'auto', is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT DEFAULT NULL, user_paused INTEGER NOT NULL DEFAULT 0);"
   );
 
   await env.DB.exec(
