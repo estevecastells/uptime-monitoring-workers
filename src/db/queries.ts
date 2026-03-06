@@ -1,4 +1,4 @@
-import type { Env, Monitor, Check, Incident, MonitorStats } from '../types';
+import type { Env, Monitor, Check, Incident, MonitorStats, CfAccount } from '../types';
 
 export async function getActiveMonitors(env: Env): Promise<Monitor[]> {
   const result = await env.DB.prepare(
@@ -106,6 +106,40 @@ export async function setSetting(env: Env, key: string, value: string): Promise<
   await env.DB.prepare(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   ).bind(key, value).run();
+}
+
+// ── CF Accounts ─────────────────────────────────────────
+
+export async function getCfAccounts(env: Env): Promise<CfAccount[]> {
+  const result = await env.DB.prepare(
+    'SELECT * FROM cf_accounts WHERE is_active = 1 ORDER BY name'
+  ).all<CfAccount>();
+  return result.results;
+}
+
+export async function getAllCfAccounts(env: Env): Promise<CfAccount[]> {
+  const result = await env.DB.prepare(
+    'SELECT * FROM cf_accounts ORDER BY name'
+  ).all<CfAccount>();
+  return result.results;
+}
+
+export async function addCfAccount(env: Env, name: string, email: string, apiKey: string): Promise<void> {
+  await env.DB.prepare(
+    'INSERT INTO cf_accounts (name, email, api_key) VALUES (?, ?, ?)'
+  ).bind(name, email, apiKey).run();
+}
+
+export async function deleteCfAccount(env: Env, id: number): Promise<void> {
+  await env.DB.prepare('DELETE FROM cf_accounts WHERE id = ?').bind(id).run();
+  // Clear the reference from monitors that belonged to this account
+  await env.DB.prepare('UPDATE monitors SET cf_account_id = NULL WHERE cf_account_id = ?').bind(id).run();
+}
+
+export async function toggleCfAccount(env: Env, id: number): Promise<void> {
+  await env.DB.prepare(
+    'UPDATE cf_accounts SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?'
+  ).bind(id).run();
 }
 
 export async function cleanOldChecks(env: Env): Promise<void> {

@@ -4,10 +4,13 @@ import type { Env } from './types';
 import { renderDashboard } from './ui/dashboard';
 import { renderDetail } from './ui/detail';
 import { renderSettings } from './ui/settings';
+import { renderMonitors } from './ui/monitors';
 import { renderLogin } from './ui/login';
-import { getAllMonitors, getSetting, setSetting } from './db/queries';
+import { getSetting, setSetting } from './db/queries';
 import { getMonitorStats, getRecentChecks } from './db/queries';
+import { getAllCfAccounts, addCfAccount, deleteCfAccount, toggleCfAccount } from './db/queries';
 import { syncZones } from './cron/discovery';
+import { normalizeUrl } from './utils';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -74,6 +77,10 @@ app.get('/monitor/:id', async (c) => {
   return c.html(await renderDetail(c.env, id));
 });
 
+app.get('/monitors', async (c) => {
+  return c.html(await renderMonitors(c.env));
+});
+
 app.get('/settings', async (c) => {
   return c.html(await renderSettings(c.env));
 });
@@ -85,17 +92,19 @@ app.post('/api/monitors', async (c) => {
   const { url, name } = body;
 
   if (!url) return c.json({ error: 'URL is required' }, 400);
+  let parsedUrl: URL;
   try {
-    new URL(url);
+    parsedUrl = new URL(url);
   } catch {
     return c.json({ error: 'Invalid URL' }, 400);
   }
 
+  const normalized = normalizeUrl(url);
   try {
     await c.env.DB.prepare(
       "INSERT INTO monitors (url, name, source) VALUES (?, ?, 'manual')"
     )
-      .bind(url, name || new URL(url).hostname)
+      .bind(normalized, name || parsedUrl.hostname)
       .run();
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -133,14 +142,15 @@ app.put('/api/monitors/:id', async (c) => {
     try { new URL(url); } catch { return c.json({ error: 'Invalid URL' }, 400); }
   }
 
-  if (url && name) {
+  const normalized = url ? normalizeUrl(url) : undefined;
+  if (normalized && name) {
     await c.env.DB.prepare(
       "UPDATE monitors SET url = ?, name = ?, updated_at = datetime('now') WHERE id = ?"
-    ).bind(url, name, id).run();
-  } else if (url) {
+    ).bind(normalized, name, id).run();
+  } else if (normalized) {
     await c.env.DB.prepare(
       "UPDATE monitors SET url = ?, updated_at = datetime('now') WHERE id = ?"
-    ).bind(url, id).run();
+    ).bind(normalized, id).run();
   } else if (name) {
     await c.env.DB.prepare(
       "UPDATE monitors SET name = ?, updated_at = datetime('now') WHERE id = ?"
@@ -196,6 +206,40 @@ app.put('/api/settings', async (c) => {
     const days = Math.max(1, Math.min(90, Math.round(body.retention_days)));
     await setSetting(c.env, 'retention_days', String(days));
   }
+  return c.json({ ok: true });
+});
+
+// ── CF Accounts API ─────────────────────────────────────
+
+app.get('/api/cf-accounts', async (c) => {
+  const accounts = await getAllCfAccounts(c.env);
+  // Mask API keys in response
+  return c.json(accounts.map(a => ({ ...a, api_key: a.api_key.slice(0, 6) + '...' })));
+});
+
+app.post('/api/cf-accounts', async (c) => {
+  const body = await c.req.json<{ name?: string; email?: string; api_key?: string }>();
+  const { name, email, api_key } = body;
+
+  if (!name || !email || !api_key) {
+    return c.json({ error: 'Name, email, and API key are required' }, 400);
+  }
+
+  await addCfAccount(c.env, name, email, api_key);
+  return c.json({ ok: true }, 201);
+});
+
+app.delete('/api/cf-accounts/:id', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
+  await deleteCfAccount(c.env, id);
+  return c.json({ ok: true });
+});
+
+app.post('/api/cf-accounts/:id/toggle', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
+  await toggleCfAccount(c.env, id);
   return c.json({ ok: true });
 });
 

@@ -1,4 +1,6 @@
-import type { Env } from '../types';
+import type { Env, CfAccount } from '../types';
+import { getCfAccounts } from '../db/queries';
+import { normalizeUrl } from '../utils';
 
 interface ZoneResult {
   name: string;
@@ -10,8 +12,8 @@ interface CFResponse {
   success: boolean;
 }
 
-export async function syncZones(env: Env): Promise<void> {
-  const allDomains: { name: string; url: string }[] = [];
+async function fetchZonesForAccount(account: CfAccount): Promise<{ name: string; url: string }[]> {
+  const domains: { name: string; url: string }[] = [];
   let page = 1;
 
   while (true) {
@@ -19,8 +21,8 @@ export async function syncZones(env: Env): Promise<void> {
       `https://api.cloudflare.com/client/v4/zones?per_page=50&page=${page}&status=active`,
       {
         headers: {
-          'X-Auth-Email': env.CLOUDFLARE_EMAIL,
-          'X-Auth-Key': env.CLOUDFLARE_API_KEY,
+          'X-Auth-Email': account.email,
+          'X-Auth-Key': account.api_key,
           'Content-Type': 'application/json',
         },
       }
@@ -30,20 +32,48 @@ export async function syncZones(env: Env): Promise<void> {
     if (!data.success) break;
 
     for (const zone of data.result) {
-      allDomains.push({ name: zone.name, url: `https://${zone.name}` });
+      domains.push({ name: zone.name, url: normalizeUrl(`https://${zone.name}`) });
     }
 
     if (page >= data.result_info.total_pages) break;
     page++;
   }
 
+  return domains;
+}
+
+export async function syncZones(env: Env): Promise<void> {
+  // Gather accounts from DB
+  const accounts = await getCfAccounts(env);
+
+  // Fallback: if env vars are set and no DB accounts exist, use them
+  if (accounts.length === 0 && env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_EMAIL) {
+    accounts.push({
+      id: 0,
+      name: 'Default',
+      email: env.CLOUDFLARE_EMAIL,
+      api_key: env.CLOUDFLARE_API_KEY,
+      is_active: 1,
+      created_at: '',
+    });
+  }
+
+  const allDomains: { name: string; url: string; accountId: number }[] = [];
+
+  for (const account of accounts) {
+    const domains = await fetchZonesForAccount(account);
+    for (const d of domains) {
+      allDomains.push({ ...d, accountId: account.id });
+    }
+  }
+
   // Upsert each domain — skip any that were manually deleted
   for (const domain of allDomains) {
     await env.DB.prepare(
-      `INSERT INTO monitors (url, name, source) VALUES (?, ?, 'auto')
-       ON CONFLICT(url) DO UPDATE SET name = excluded.name, updated_at = datetime('now')
+      `INSERT INTO monitors (url, name, source, cf_account_id) VALUES (?, ?, 'auto', ?)
+       ON CONFLICT(url) DO UPDATE SET name = excluded.name, cf_account_id = excluded.cf_account_id, updated_at = datetime('now')
        WHERE deleted_at IS NULL`
-    ).bind(domain.url, domain.name).run();
+    ).bind(domain.url, domain.name, domain.accountId || null).run();
   }
 
   // Deactivate auto-discovered monitors whose zones no longer exist (only non-deleted ones)

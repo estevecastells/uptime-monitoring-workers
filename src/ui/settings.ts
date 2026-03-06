@@ -1,50 +1,55 @@
 import type { Env } from '../types';
-import { getAllMonitors, getSetting } from '../db/queries';
+import { getSetting, getAllCfAccounts } from '../db/queries';
 import { layout } from './layout';
 
 export async function renderSettings(env: Env): Promise<string> {
-  const monitors = await getAllMonitors(env);
   const retentionDays = parseInt(await getSetting(env, 'retention_days') || '7') || 7;
+  const cfAccounts = await getAllCfAccounts(env);
 
-  const rows = monitors.length > 0
-    ? monitors
-        .map(
-          (m) => `
+  const accountRows = cfAccounts.length > 0
+    ? cfAccounts.map(a => `
         <tr>
+          <td style="font-weight: 500; color: #fff;">${a.name}</td>
+          <td>${a.email}</td>
+          <td style="font-family: monospace; font-size: 12px; color: #737373;">${a.api_key.slice(0, 6)}...</td>
           <td>
-            <a href="/monitor/${m.id}">${m.name}</a>
-          </td>
-          <td><a href="${m.url}" target="_blank" rel="noopener" style="color: #737373; font-size: 13px;">${m.url} &#x2197;</a></td>
-          <td><span class="badge badge-${m.source}" style="font-size: 11px;">${m.source}</span></td>
-          <td>
-            ${m.is_active ? '<span class="badge badge-up">Active</span>' : '<span class="badge badge-unknown">Paused</span>'}
+            ${a.is_active ? '<span class="badge badge-up">Active</span>' : '<span class="badge badge-unknown">Disabled</span>'}
           </td>
           <td style="text-align: right;">
-            <button class="btn-ghost" style="padding: 4px 12px; font-size: 12px;" onclick="toggleMonitor(${m.id})">${m.is_active ? 'Pause' : 'Resume'}</button>
-            ${m.source === 'manual' ? `<button class="btn-danger" style="padding: 4px 12px; font-size: 12px; margin-left: 6px;" onclick="deleteMonitor(${m.id})">Delete</button>` : ''}
+            <button class="btn-ghost" style="padding: 4px 12px; font-size: 12px;" onclick="toggleAccount(${a.id})">${a.is_active ? 'Disable' : 'Enable'}</button>
+            <button class="btn-danger" style="padding: 4px 12px; font-size: 12px; margin-left: 6px;" onclick="deleteAccount(${a.id})">Remove</button>
           </td>
-        </tr>`
-        )
-        .join('')
-    : '<tr><td colspan="5" style="text-align: center; color: #525252; padding: 20px;">No monitors yet</td></tr>';
+        </tr>`).join('')
+    : '<tr><td colspan="5" style="text-align: center; color: #525252; padding: 20px;">No accounts added yet</td></tr>';
 
   const content = `
     <h1>Settings</h1>
 
     <div class="card" style="margin-bottom: 24px;">
-      <h2 style="margin-bottom: 12px;">Add Monitor</h2>
-      <form id="addForm">
+      <h2 style="margin-bottom: 12px;">Cloudflare Accounts</h2>
+      <p style="color: #a3a3a3; font-size: 13px; margin-bottom: 16px;">Connect multiple Cloudflare accounts to auto-discover zones. Each account's active zones will be synced as monitors.</p>
+
+      <form id="addAccountForm" style="margin-bottom: 16px;">
         <div class="form-row">
-          <input type="url" id="url" placeholder="https://example.com" required />
-          <input type="text" id="name" placeholder="Name (optional)" style="max-width: 200px;" />
+          <input type="text" id="accName" placeholder="Account name" required style="max-width: 180px;" />
+          <input type="email" id="accEmail" placeholder="CF email" required style="max-width: 220px;" />
+          <input type="text" id="accKey" placeholder="Global API key" required />
           <button type="submit">Add</button>
         </div>
       </form>
-      <div id="formMsg" style="margin-top: 8px; font-size: 13px;"></div>
+      <div id="accMsg" style="margin-top: -8px; margin-bottom: 12px; font-size: 13px;"></div>
+
+      <div style="overflow-x: auto;">
+        <table>
+          <tr><th>Name</th><th>Email</th><th>API Key</th><th>Status</th><th></th></tr>
+          ${accountRows}
+        </table>
+      </div>
     </div>
 
     <div class="card" style="margin-bottom: 24px;">
       <h2 style="margin-bottom: 12px;">Data Retention</h2>
+      <p style="color: #a3a3a3; font-size: 13px; margin-bottom: 12px;">How long to keep check history and resolved incidents. Old data is purged nightly.</p>
       <div class="form-row">
         <select id="retention" style="max-width: 200px;">
           <option value="1"${retentionDays === 1 ? ' selected' : ''}>1 day</option>
@@ -60,59 +65,50 @@ export async function renderSettings(env: Env): Promise<string> {
       <div id="retentionMsg" style="margin-top: 8px; font-size: 13px;"></div>
     </div>
 
-    <div class="flex-between" style="margin-bottom: 16px;">
-      <h2 style="margin-bottom: 0;">Monitors (${monitors.length})</h2>
-      <button class="btn-ghost" onclick="syncZones()">Sync CF Zones</button>
-    </div>
-
-    <div class="card" style="padding: 0; overflow-x: auto;">
-      <table>
-        <tr><th>Name</th><th>URL</th><th>Source</th><th>Status</th><th></th></tr>
-        ${rows}
-      </table>
-    </div>
-
     <script>
-    const msg = document.getElementById('formMsg');
+    // ── CF Accounts ──
+    const accMsg = document.getElementById('accMsg');
 
-    document.getElementById('addForm').addEventListener('submit', async (e) => {
+    document.getElementById('addAccountForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const url = document.getElementById('url').value;
-      const name = document.getElementById('name').value;
-      msg.textContent = 'Adding...';
-      msg.style.color = '#a3a3a3';
+      const name = document.getElementById('accName').value;
+      const email = document.getElementById('accEmail').value;
+      const api_key = document.getElementById('accKey').value;
+      accMsg.textContent = 'Adding...';
+      accMsg.style.color = '#a3a3a3';
       try {
-        const res = await fetch('/api/monitors', {
+        const res = await fetch('/api/cf-accounts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, name: name || undefined }),
+          body: JSON.stringify({ name, email, api_key }),
         });
         const data = await res.json();
         if (res.ok) {
-          msg.textContent = 'Added! Reloading...';
-          msg.style.color = '#4ade80';
+          accMsg.textContent = 'Account added! Reloading...';
+          accMsg.style.color = '#4ade80';
           setTimeout(() => location.reload(), 500);
         } else {
-          msg.textContent = data.error || 'Failed to add';
-          msg.style.color = '#f87171';
+          accMsg.textContent = data.error || 'Failed to add';
+          accMsg.style.color = '#f87171';
         }
       } catch {
-        msg.textContent = 'Network error';
-        msg.style.color = '#f87171';
+        accMsg.textContent = 'Network error';
+        accMsg.style.color = '#f87171';
       }
     });
 
-    async function toggleMonitor(id) {
-      await fetch('/api/monitors/' + id + '/toggle', { method: 'POST' });
+    async function toggleAccount(id) {
+      await fetch('/api/cf-accounts/' + id + '/toggle', { method: 'POST' });
       location.reload();
     }
 
-    async function deleteMonitor(id) {
-      if (!confirm('Delete this monitor?')) return;
-      await fetch('/api/monitors/' + id, { method: 'DELETE' });
+    async function deleteAccount(id) {
+      if (!confirm('Remove this Cloudflare account? Monitors it discovered will remain but won\\u0027t be synced.')) return;
+      await fetch('/api/cf-accounts/' + id, { method: 'DELETE' });
       location.reload();
     }
 
+    // ── Data Retention ──
     async function saveRetention() {
       const days = parseInt(document.getElementById('retention').value);
       const rmsg = document.getElementById('retentionMsg');
@@ -132,19 +128,6 @@ export async function renderSettings(env: Env): Promise<string> {
       } catch {
         rmsg.textContent = 'Network error';
         rmsg.style.color = '#f87171';
-      }
-    }
-
-    async function syncZones() {
-      const btn = event.target;
-      btn.textContent = 'Syncing...';
-      btn.disabled = true;
-      try {
-        await fetch('/api/sync-zones', { method: 'POST' });
-        location.reload();
-      } catch {
-        btn.textContent = 'Failed';
-        setTimeout(() => { btn.textContent = 'Sync CF Zones'; btn.disabled = false; }, 2000);
       }
     }
     </script>

@@ -1,12 +1,21 @@
 export type Env = {
   DB: D1Database;
-  CLOUDFLARE_API_KEY: string;
-  CLOUDFLARE_EMAIL: string;
+  CLOUDFLARE_API_KEY?: string;
+  CLOUDFLARE_EMAIL?: string;
   TELEGRAM: string;
   RESEND: string;
   DASHBOARD_PASSWORD: string;
   ALERT_EMAIL: string;
 };
+
+export interface CfAccount {
+  id: number;
+  name: string;
+  email: string;
+  api_key: string;
+  is_active: number;
+  created_at: string;
+}
 
 export interface Monitor {
   id: number;
