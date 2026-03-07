@@ -58,12 +58,17 @@ export async function syncZones(env: Env): Promise<void> {
     });
   }
 
+  // Fetch zones per account, tracking which accounts succeeded
   const allDomains: { name: string; url: string; accountId: number }[] = [];
+  const succeededAccountIds: number[] = [];
 
   for (const account of accounts) {
     const domains = await fetchZonesForAccount(account);
-    for (const d of domains) {
-      allDomains.push({ ...d, accountId: account.id });
+    if (domains.length > 0) {
+      succeededAccountIds.push(account.id);
+      for (const d of domains) {
+        allDomains.push({ ...d, accountId: account.id });
+      }
     }
   }
 
@@ -76,17 +81,26 @@ export async function syncZones(env: Env): Promise<void> {
     ).bind(domain.url, domain.name, domain.accountId || null).run();
   }
 
-  // Deactivate auto-discovered monitors whose zones no longer exist (only non-deleted ones)
-  if (allDomains.length > 0) {
+  // Only deactivate monitors belonging to accounts that successfully returned zones.
+  // This prevents wiping monitors if an API call fails or an account isn't configured yet.
+  if (succeededAccountIds.length > 0) {
     const urls = allDomains.map(d => d.url);
-    const placeholders = urls.map(() => '?').join(',');
-    await env.DB.prepare(
-      `UPDATE monitors SET is_active = 0 WHERE source = 'auto' AND deleted_at IS NULL AND url NOT IN (${placeholders})`
-    ).bind(...urls).run();
+    const urlPlaceholders = urls.map(() => '?').join(',');
+    const accountPlaceholders = succeededAccountIds.map(() => '?').join(',');
 
-    // Re-activate auto monitors whose zones are back — only if not manually paused by user
+    // Deactivate auto monitors whose zones no longer exist — only for accounts that responded
     await env.DB.prepare(
-      `UPDATE monitors SET is_active = 1 WHERE source = 'auto' AND deleted_at IS NULL AND user_paused = 0 AND url IN (${placeholders})`
+      `UPDATE monitors SET is_active = 0
+       WHERE source = 'auto' AND deleted_at IS NULL
+       AND (cf_account_id IN (${accountPlaceholders}) OR cf_account_id IS NULL)
+       AND url NOT IN (${urlPlaceholders})`
+    ).bind(...succeededAccountIds, ...urls).run();
+
+    // Re-activate auto monitors whose zones are back — only if not manually paused
+    await env.DB.prepare(
+      `UPDATE monitors SET is_active = 1
+       WHERE source = 'auto' AND deleted_at IS NULL AND user_paused = 0
+       AND url IN (${urlPlaceholders})`
     ).bind(...urls).run();
   }
 }

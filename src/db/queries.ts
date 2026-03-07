@@ -9,7 +9,7 @@ export async function getActiveMonitors(env: Env): Promise<Monitor[]> {
 
 export async function getAllMonitors(env: Env): Promise<Monitor[]> {
   const result = await env.DB.prepare(
-    'SELECT * FROM monitors WHERE deleted_at IS NULL ORDER BY name'
+    'SELECT * FROM monitors WHERE deleted_at IS NULL ORDER BY is_active DESC, name'
   ).all<Monitor>();
   return result.results;
 }
