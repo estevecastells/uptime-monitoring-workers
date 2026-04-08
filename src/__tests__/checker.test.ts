@@ -36,12 +36,15 @@ describe('runChecks', () => {
     expect(checks[0].status_code).toBe(200);
   });
 
-  it('records failure when fetch throws', async () => {
+  it('records failure when fetch throws after all retries', async () => {
     const id = await insertMonitor(env.DB, 'https://mock-fail.test', 'Mock Fail');
 
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
 
     await runChecks(testEnv);
+
+    // Should have retried 3 times total (1 initial + 2 retries)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
 
     const checks = await getLastNChecks(testEnv, id, 1);
     expect(checks).toHaveLength(1);
@@ -49,7 +52,7 @@ describe('runChecks', () => {
     expect(checks[0].error).toBe('Connection refused');
   });
 
-  it('marks non-2xx/3xx as down', async () => {
+  it('marks non-2xx/3xx as down after retries', async () => {
     const id = await insertMonitor(env.DB, 'https://mock-500.test', 'Mock 500');
 
     globalThis.fetch = vi.fn().mockResolvedValue(
@@ -58,9 +61,31 @@ describe('runChecks', () => {
 
     await runChecks(testEnv);
 
+    // Should have retried 3 times total
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+
     const checks = await getLastNChecks(testEnv, id, 1);
     expect(checks[0].is_up).toBe(0);
     expect(checks[0].error).toBe('HTTP 500');
+  });
+
+  it('recovers on retry without recording a failure', async () => {
+    const id = await insertMonitor(env.DB, 'https://mock-flaky.test', 'Flaky');
+
+    // First call fails, second succeeds
+    globalThis.fetch = vi.fn()
+      .mockRejectedValueOnce(new Error('Connection reset'))
+      .mockResolvedValue(new Response('OK', { status: 200 }));
+
+    await runChecks(testEnv);
+
+    // Should have called fetch twice (initial fail + first retry succeeds)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+
+    const checks = await getLastNChecks(testEnv, id, 1);
+    expect(checks).toHaveLength(1);
+    expect(checks[0].is_up).toBe(1);
+    expect(checks[0].status_code).toBe(200);
   });
 
   it('skips inactive monitors', async () => {
@@ -89,7 +114,7 @@ describe('recheckDown', () => {
 
     await recheckDown(testEnv);
 
-    // Only the down monitor should have been rechecked
+    // Only the down monitor should have been rechecked (returns 200, so no retries)
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     const fetchCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(fetchCall[0]).toBe('https://down.test');
@@ -100,17 +125,17 @@ describe('Incident logic', () => {
   it('creates incident after 2 consecutive failures', async () => {
     const id = await insertMonitor(env.DB, 'https://flaky.test', 'Flaky');
 
-    // Mock notifications to avoid real API calls
+    // Mock that always fails (all retries exhausted)
     globalThis.fetch = vi.fn().mockResolvedValue(
       new Response('', { status: 500 })
     );
 
-    // First failure — no incident yet
+    // First failure (after 3 retries) — no incident yet
     await runChecks(testEnv);
     let incident = await getOpenIncident(testEnv, id);
     expect(incident).toBeNull();
 
-    // Second consecutive failure — incident created
+    // Second consecutive failure (after 3 retries) — incident created
     await runChecks(testEnv);
     incident = await getOpenIncident(testEnv, id);
     expect(incident).not.toBeNull();
