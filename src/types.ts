@@ -25,6 +25,22 @@ export interface Monitor {
   is_active: number;
   created_at: string;
   updated_at: string;
+  notify_email: number;
+  notify_telegram: number;
+  current_status: number | null;
+  last_response_ms: number | null;
+  last_status_code: number | null;
+  last_error: string | null;
+  last_checked_at: string | null;
+  last_logged_at: string | null;
+  last_status_change_at: string | null;
+  consecutive_downs: number;
+}
+
+export interface CheckOutcome {
+  stateChanged: boolean;
+  consecutiveDowns: number;
+  previousStatus: number | null;
 }
 
 export interface Check {

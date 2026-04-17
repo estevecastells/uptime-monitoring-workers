@@ -1,9 +1,8 @@
-import type { Env, Monitor } from '../types';
+import type { Env, Monitor, CheckOutcome } from '../types';
 import {
   getActiveMonitors,
   getDownMonitors,
-  insertCheck,
-  getLastNChecks,
+  recordCheck,
   getOpenIncident,
   createIncident,
   resolveIncident,
@@ -85,11 +84,18 @@ async function checkSingle(env: Env, monitor: Monitor): Promise<void> {
   }
 
   const isUp = result.outcome === 'up';
-  await insertCheck(env, monitor.id, result.statusCode, result.responseMs, isUp, result.error);
+  const outcome = await recordCheck(
+    env,
+    monitor,
+    result.statusCode,
+    result.responseMs,
+    isUp,
+    result.error
+  );
 
   // 'unknown' outcomes preserve the current state — don't trigger incident logic
   if (result.outcome !== 'unknown') {
-    await handleIncident(env, monitor, isUp, result.error);
+    await handleIncident(env, monitor, isUp, result.error, outcome);
   }
 }
 
@@ -97,15 +103,15 @@ async function handleIncident(
   env: Env,
   monitor: Monitor,
   isUp: boolean,
-  error: string | null
+  error: string | null,
+  outcome: CheckOutcome
 ): Promise<void> {
   const openIncident = await getOpenIncident(env, monitor.id);
 
   if (!isUp) {
-    // Check for 2 consecutive failures before alerting
-    const recent = await getLastNChecks(env, monitor.id, 2);
-    const confirmedDown =
-      recent.length >= 2 && recent.every((c) => c.is_up === 0);
+    // Alert once we've seen 2+ consecutive failures. The counter lives on the
+    // monitors row so we don't have to re-scan the checks table.
+    const confirmedDown = outcome.consecutiveDowns >= 2;
 
     if (confirmedDown && !openIncident) {
       await createIncident(env, monitor.id);

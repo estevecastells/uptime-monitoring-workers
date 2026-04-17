@@ -11,9 +11,9 @@ export default {
     switch (controller.cron) {
       case '* * * * *': {
         // Every minute: recheck monitors that are currently down
-        // Every 5th minute: full check on all monitors
+        // Every 10th minute: full check on all monitors
         const minute = new Date(controller.scheduledTime).getMinutes();
-        if (minute % 5 === 0) {
+        if (minute % 10 === 0) {
           ctx.waitUntil(runChecks(env));
         } else {
           ctx.waitUntil(recheckDown(env));

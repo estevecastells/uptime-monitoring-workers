@@ -36,6 +36,26 @@ export async function applyMigrations(): Promise<void> {
   await env.DB.exec(
     "INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_days', '7');"
   );
+
+  // Added by migration 0007 — state tracking columns so we can write sparse
+  // rows to `checks` and derive uptime from `monitors` directly.
+  const stateCols: Array<[string, string]> = [
+    ['current_status', 'INTEGER'],
+    ['last_response_ms', 'INTEGER'],
+    ['last_status_code', 'INTEGER'],
+    ['last_error', 'TEXT'],
+    ['last_checked_at', 'TEXT'],
+    ['last_logged_at', 'TEXT'],
+    ['last_status_change_at', 'TEXT'],
+    ['consecutive_downs', 'INTEGER NOT NULL DEFAULT 0'],
+  ];
+  for (const [col, type] of stateCols) {
+    try {
+      await env.DB.exec(`ALTER TABLE monitors ADD COLUMN ${col} ${type};`);
+    } catch {
+      // column already exists on re-run
+    }
+  }
 }
 
 /** Clear all tables between tests */
