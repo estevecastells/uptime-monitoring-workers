@@ -12,18 +12,6 @@ interface CFResponse {
   success: boolean;
 }
 
-function cfAuthHeaders(email: string, apiKey: string): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  // API Tokens (cfk_ prefix) use Bearer auth; legacy Global API Keys use X-Auth-Email/X-Auth-Key
-  if (apiKey.startsWith('cfk_')) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  } else {
-    headers['X-Auth-Email'] = email;
-    headers['X-Auth-Key'] = apiKey;
-  }
-  return headers;
-}
-
 async function fetchZonesForAccount(account: CfAccount): Promise<{ name: string; url: string }[]> {
   const domains: { name: string; url: string }[] = [];
   let page = 1;
@@ -32,7 +20,11 @@ async function fetchZonesForAccount(account: CfAccount): Promise<{ name: string;
     const resp = await fetch(
       `https://api.cloudflare.com/client/v4/zones?per_page=50&page=${page}&status=active`,
       {
-        headers: cfAuthHeaders(account.email, account.api_key),
+        headers: {
+          'X-Auth-Email': account.email,
+          'X-Auth-Key': account.api_key,
+          'Content-Type': 'application/json',
+        },
       }
     );
 
