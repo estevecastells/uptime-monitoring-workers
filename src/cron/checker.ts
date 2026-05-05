@@ -14,7 +14,7 @@ const BATCH_SIZE = 10;
 const MAX_RETRIES = 3;
 const RETRY_DELAYS_MS = [300, 800] as const;
 
-type CheckOutcome = 'up' | 'down' | 'unknown';
+type FetchOutcome = 'up' | 'down' | 'unknown';
 
 async function runInBatches(env: Env, monitors: Monitor[]): Promise<void> {
   for (let i = 0; i < monitors.length; i += BATCH_SIZE) {
@@ -40,7 +40,7 @@ function sleep(ms: number): Promise<void> {
 async function attemptFetch(
   env: Env,
   url: string
-): Promise<{ statusCode: number | null; responseMs: number; outcome: CheckOutcome; error: string | null }> {
+): Promise<{ statusCode: number | null; responseMs: number; outcome: FetchOutcome; error: string | null }> {
   const start = Date.now();
   try {
     const controller = new AbortController();
@@ -77,7 +77,7 @@ async function attemptFetch(
     const message = e instanceof Error ? e.message : 'Network error';
     // Aborted requests (timeouts) are definitive failures; other network
     // errors may be transient and ambiguous on the first attempt.
-    const outcome: CheckOutcome = 'down';
+    const outcome: FetchOutcome = 'down';
     return { statusCode: null, responseMs, outcome, error: message };
   }
 }
