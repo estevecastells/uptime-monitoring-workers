@@ -6,6 +6,9 @@ export type Env = {
   RESEND: string;
   DASHBOARD_PASSWORD: string;
   ALERT_EMAIL: string;
+  // Shared secret sent as X-Uptime-Token to bypass origin WAF rules. Optional
+  // so the worker still runs in environments without it (tests, dev).
+  UPTIME_TOKEN?: string;
 };
 
 export interface CfAccount {
