@@ -14,3 +14,17 @@ binding = "DB"
 database_name = "uptime-monitor-db"
 database_id = "your-database-id-here"  # Run: npx wrangler d1 create uptime-monitor-db
 migrations_dir = "migrations"
+
+# Secrets (set with `npx wrangler secret put <NAME>`):
+#   TELEGRAM                  - Telegram bot token + chat ID, pipe-separated
+#   TELEGRAM_BOT_CREDENTIALS  - alternate format (token|chat_id|topic_id)
+#   DASHBOARD_PASSWORD        - protects the dashboard
+#   CF_API_TOKEN              - Cloudflare API token for zone discovery
+#   CF_ACCOUNT_ID             - Cloudflare account ID
+#   RESEND                    - (optional) Resend API key for email alerts
+#   ALERT_EMAIL               - (optional) destination address for email alerts
+#   UPTIME_TOKEN              - shared secret sent as `X-Uptime-Token` header on
+#                               every fetch, so the origin WAF whitelists this
+#                               worker without bypassing real scanner blocks.
+#                               Must match the value used in the WAF rules
+#                               of every protected zone.
