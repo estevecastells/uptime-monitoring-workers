@@ -1,10 +1,16 @@
+import { escapeHtml } from '../utils';
+
+/**
+ * `content` is composed HTML and is emitted as-is; `title` is caller data
+ * (a monitor name, for instance) and is escaped here so no caller can forget.
+ */
 export function layout(title: string, content: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} — Uptime Monitor</title>
+  <title>${escapeHtml(title)} — Uptime Monitor</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0a0a'/%3E%3Cpath d='M4 18h6l3-10 4 16 3-12 2 6h6' fill='none' stroke='%2322c55e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230a0a0a'/%3E%3Cpath d='M20 100h35l17-56 22 90 17-67 11 33h38' fill='none' stroke='%2322c55e' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <style>

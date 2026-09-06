@@ -1,4 +1,4 @@
-import type { Env, Monitor, Check, Incident, MonitorStats, CfAccount, CheckOutcome } from '../types';
+import type { Env, Monitor, Check, Incident, MonitorStats, CfAccount, CheckOutcome, CfAuthType } from '../types';
 
 // Minimum gap between `checks` rows for an unchanged-status monitor. Without
 // this the table would only grow on state transitions, which is too sparse
@@ -215,10 +215,16 @@ export async function getAllCfAccounts(env: Env): Promise<CfAccount[]> {
   return result.results;
 }
 
-export async function addCfAccount(env: Env, name: string, email: string, apiKey: string): Promise<void> {
+export async function addCfAccount(
+  env: Env,
+  name: string,
+  email: string,
+  apiKey: string,
+  authType: CfAuthType = 'token'
+): Promise<void> {
   await env.DB.prepare(
-    'INSERT INTO cf_accounts (name, email, api_key) VALUES (?, ?, ?)'
-  ).bind(name, email, apiKey).run();
+    'INSERT INTO cf_accounts (name, email, api_key, auth_type) VALUES (?, ?, ?, ?)'
+  ).bind(name, email, apiKey, authType).run();
 }
 
 export async function deleteCfAccount(env: Env, id: number): Promise<void> {
@@ -235,10 +241,14 @@ export async function toggleCfAccount(env: Env, id: number): Promise<void> {
 
 export async function cleanOldChecks(env: Env): Promise<void> {
   const days = parseInt(await getSetting(env, 'retention_days') || '7') || 7;
+  // Bound and bind rather than interpolate. parseInt already guarantees a
+  // number here, but this is the only statement in the file that built SQL by
+  // string concatenation, and that is not a property worth relying on.
+  const window = `-${Math.min(Math.max(days, 1), 365)} days`;
   await env.DB.prepare(
-    `DELETE FROM checks WHERE checked_at < datetime('now', '-${days} days')`
-  ).run();
+    "DELETE FROM checks WHERE checked_at < datetime('now', ?)"
+  ).bind(window).run();
   await env.DB.prepare(
-    `DELETE FROM incidents WHERE resolved_at IS NOT NULL AND resolved_at < datetime('now', '-${days} days')`
-  ).run();
+    "DELETE FROM incidents WHERE resolved_at IS NOT NULL AND resolved_at < datetime('now', ?)"
+  ).bind(window).run();
 }

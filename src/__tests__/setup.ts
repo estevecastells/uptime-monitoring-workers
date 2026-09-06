@@ -39,7 +39,7 @@ export async function applyMigrations(): Promise<void> {
 
   // Added by migration 0005 — multi-account zone sync.
   await env.DB.exec(
-    "CREATE TABLE IF NOT EXISTS cf_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL, api_key TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')));"
+    "CREATE TABLE IF NOT EXISTS cf_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL, api_key TEXT NOT NULL, auth_type TEXT NOT NULL DEFAULT 'global_key', is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')));"
   );
 
   // Added by migration 0006 — per-monitor notification channel toggles.

@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { getAllMonitors } from '../db/queries';
 import { layout } from './layout';
+import { escapeHtml, safeHref } from '../utils';
 
 export async function renderMonitors(env: Env): Promise<string> {
   const monitors = await getAllMonitors(env);
@@ -11,10 +12,10 @@ export async function renderMonitors(env: Env): Promise<string> {
           (m) => `
         <tr>
           <td>
-            <a href="/monitor/${m.id}">${m.name}</a>
+            <a href="/monitor/${m.id}">${escapeHtml(m.name)}</a>
           </td>
-          <td><a href="${m.url}" target="_blank" rel="noopener" style="color: #737373; font-size: 13px;">${m.url} &#x2197;</a></td>
-          <td><span class="badge badge-${m.source}" style="font-size: 11px;">${m.source}</span></td>
+          <td><a href="${safeHref(m.url)}" target="_blank" rel="noopener" style="color: #737373; font-size: 13px;">${escapeHtml(m.url)} &#x2197;</a></td>
+          <td><span class="badge badge-${escapeHtml(m.source)}" style="font-size: 11px;">${escapeHtml(m.source)}</span></td>
           <td>
             ${m.is_active ? '<span class="badge badge-up">Active</span>' : '<span class="badge badge-unknown">Paused</span>'}
           </td>

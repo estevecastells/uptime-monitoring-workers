@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { getMonitor, getRecentChecks, getMonitorIncidents } from '../db/queries';
 import { layout } from './layout';
+import { escapeHtml, safeHref } from '../utils';
 
 export async function renderDetail(env: Env, id: number): Promise<string> {
   const monitor = await getMonitor(env, id);
@@ -39,8 +40,8 @@ export async function renderDetail(env: Env, id: number): Promise<string> {
     } else {
       const cls = check.is_up ? 'seg-up' : 'seg-down';
       const title = check.is_up
-        ? `Up — ${check.response_ms}ms`
-        : `Down — ${check.error || 'Error'}`;
+        ? `Up — ${escapeHtml(check.response_ms)}ms`
+        : `Down — ${escapeHtml(check.error || 'Error')}`;
       segments.push(`<div class="seg ${cls}" title="${title}"></div>`);
     }
   }
@@ -59,9 +60,9 @@ export async function renderDetail(env: Env, id: number): Promise<string> {
             : 'Ongoing';
           return `
           <tr>
-            <td>${inc.started_at.replace('T', ' ').slice(0, 16)}</td>
-            <td>${inc.resolved_at ? inc.resolved_at.replace('T', ' ').slice(0, 16) : '—'}</td>
-            <td>${duration}</td>
+            <td>${escapeHtml(inc.started_at.replace('T', ' ').slice(0, 16))}</td>
+            <td>${inc.resolved_at ? escapeHtml(inc.resolved_at.replace('T', ' ').slice(0, 16)) : '—'}</td>
+            <td>${escapeHtml(duration)}</td>
           </tr>`;
         })
         .join('')
@@ -72,9 +73,9 @@ export async function renderDetail(env: Env, id: number): Promise<string> {
       <a href="/" style="color: #737373; font-size: 13px;">&larr; Back to dashboard</a>
     </div>
     <div class="flex-between" style="margin-bottom: 20px;">
-      <h1 style="margin-bottom: 0;">${monitor.name} ${currentStatus}</h1>
+      <h1 style="margin-bottom: 0;">${escapeHtml(monitor.name)} ${currentStatus}</h1>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <a href="${monitor.url}" target="_blank" rel="noopener" style="color: #737373; font-size: 13px;">${monitor.url} &#x2197;</a>
+        <a href="${safeHref(monitor.url)}" target="_blank" rel="noopener" style="color: #737373; font-size: 13px;">${escapeHtml(monitor.url)} &#x2197;</a>
         <button class="btn-ghost" style="padding: 4px 14px; font-size: 13px;" onclick="showEdit()">Edit</button>
         <button class="btn-ghost" style="padding: 4px 14px; font-size: 13px;" onclick="toggleMonitor(${monitor.id})">${monitor.is_active ? 'Pause' : 'Resume'}</button>
         <button class="btn-danger" style="padding: 4px 14px; font-size: 13px;" onclick="deleteMonitor(${monitor.id})">Delete</button>
@@ -83,8 +84,8 @@ export async function renderDetail(env: Env, id: number): Promise<string> {
     <div id="editForm" class="card" style="display: none; margin-bottom: 16px;">
       <h2 style="margin-bottom: 12px;">Edit Monitor</h2>
       <div class="form-row">
-        <input type="text" id="editName" value="${monitor.name}" placeholder="Name" />
-        <input type="url" id="editUrl" value="${monitor.url}" placeholder="https://example.com" />
+        <input type="text" id="editName" value="${escapeHtml(monitor.name)}" placeholder="Name" />
+        <input type="url" id="editUrl" value="${escapeHtml(monitor.url)}" placeholder="https://example.com" />
         <button onclick="saveEdit(${monitor.id})">Save</button>
         <button class="btn-ghost" onclick="hideEdit()">Cancel</button>
       </div>

@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { getSetting, getAllCfAccounts } from '../db/queries';
 import { layout } from './layout';
+import { escapeHtml } from '../utils';
 
 export async function renderSettings(env: Env): Promise<string> {
   const retentionDays = parseInt(await getSetting(env, 'retention_days') || '7') || 7;
@@ -9,9 +10,9 @@ export async function renderSettings(env: Env): Promise<string> {
   const accountRows = cfAccounts.length > 0
     ? cfAccounts.map(a => `
         <tr>
-          <td style="font-weight: 500; color: #fff;">${a.name}</td>
-          <td>${a.email}</td>
-          <td style="font-family: monospace; font-size: 12px; color: #737373;">${a.api_key.slice(0, 6)}...</td>
+          <td style="font-weight: 500; color: #fff;">${escapeHtml(a.name)}</td>
+          <td>${escapeHtml(a.email)}</td>
+          <td style="font-family: monospace; font-size: 12px; color: #737373;">${escapeHtml(a.api_key.slice(0, 4))}&hellip;</td>
           <td>
             ${a.is_active ? '<span class="badge badge-up">Active</span>' : '<span class="badge badge-unknown">Disabled</span>'}
           </td>

@@ -10,7 +10,7 @@ import { getSetting, setSetting } from './db/queries';
 import { getMonitorStats, getRecentChecks } from './db/queries';
 import { getAllCfAccounts, addCfAccount, deleteCfAccount, toggleCfAccount } from './db/queries';
 import { syncZones } from './cron/discovery';
-import { normalizeUrl } from './utils';
+import { normalizeUrl, parseHttpUrl } from './utils';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -49,6 +49,44 @@ app.use('*', async (c, next) => {
   return next();
 });
 
+// ── CSRF ───────────────────────────────────────────────
+//
+// Several state-changing endpoints take no request body (toggle, sync-zones),
+// so a cross-site form post would be a valid request if the browser attached
+// the Access session cookie. Rather than depend on the cookie's SameSite
+// attribute — which is set by Cloudflare, not by us — require that unsafe
+// methods come from our own origin.
+//
+// Origin is sent by browsers on every cross-origin request and cannot be
+// forged by page JavaScript. Requests with no Origin at all (curl, the
+// dashboard's own same-origin fetches in older browsers) fall back to Referer,
+// and are allowed only if neither header is present — a non-browser client,
+// which cannot be a CSRF victim.
+
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+app.use('*', async (c, next) => {
+  if (!UNSAFE_METHODS.has(c.req.method)) return next();
+
+  const target = new URL(c.req.url).origin;
+  const origin = c.req.header('Origin');
+  const referer = c.req.header('Referer');
+
+  if (origin) {
+    if (origin !== target) return c.json({ error: 'Cross-origin request rejected' }, 403);
+  } else if (referer) {
+    let refererOrigin: string;
+    try {
+      refererOrigin = new URL(referer).origin;
+    } catch {
+      return c.json({ error: 'Cross-origin request rejected' }, 403);
+    }
+    if (refererOrigin !== target) return c.json({ error: 'Cross-origin request rejected' }, 403);
+  }
+
+  return next();
+});
+
 // ── UI routes ──────────────────────────────────────────
 
 app.get('/', async (c) => {
@@ -76,11 +114,9 @@ app.post('/api/monitors', async (c) => {
   const { url, name } = body;
 
   if (!url) return c.json({ error: 'URL is required' }, 400);
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(url);
-  } catch {
-    return c.json({ error: 'Invalid URL' }, 400);
+  const parsedUrl = parseHttpUrl(url);
+  if (!parsedUrl) {
+    return c.json({ error: 'URL must be a valid http(s) URL' }, 400);
   }
 
   const normalized = normalizeUrl(url);
@@ -122,8 +158,8 @@ app.put('/api/monitors/:id', async (c) => {
   const body = await c.req.json<{ url?: string; name?: string }>();
   const { url, name } = body;
 
-  if (url) {
-    try { new URL(url); } catch { return c.json({ error: 'Invalid URL' }, 400); }
+  if (url && !parseHttpUrl(url)) {
+    return c.json({ error: 'URL must be a valid http(s) URL' }, 400);
   }
 
   const normalized = url ? normalizeUrl(url) : undefined;
@@ -182,7 +218,8 @@ app.get('/api/monitors/:id/checks', async (c) => {
   const id = parseInt(c.req.param('id'));
   if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
 
-  const limit = parseInt(c.req.query('limit') || '288');
+  const requested = parseInt(c.req.query('limit') || '288');
+  const limit = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), 1000) : 288;
   const checks = await getRecentChecks(c.env, id, limit);
   return c.json(checks);
 });

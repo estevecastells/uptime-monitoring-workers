@@ -1,4 +1,5 @@
 import type { Env, Monitor } from '../types';
+import { escapeHtml } from '../utils';
 
 // Simple queue to avoid hitting Telegram rate limits when many monitors alert at once.
 // Telegram allows ~30 msg/s per bot, but bursts to the same chat can still get throttled.
@@ -16,10 +17,13 @@ export async function sendTelegramAlert(
   const [botToken, chatId] = parts;
 
   const emoji = status === 'down' ? '\u{1F534}' : '\u{1F7E2}';
+  // parse_mode is HTML, so unescaped values are not just an injection risk:
+  // a single stray '<' in a monitor name or error makes Telegram reject the
+  // whole message with a 400, and the down-alert is lost silently.
   const text =
     status === 'down'
-      ? `${emoji} <b>DOWN</b>: ${monitor.name}\n${monitor.url}\nError: ${error || 'Unknown'}`
-      : `${emoji} <b>RECOVERED</b>: ${monitor.name}\n${monitor.url}`;
+      ? `${emoji} <b>DOWN</b>: ${escapeHtml(monitor.name)}\n${escapeHtml(monitor.url)}\nError: ${escapeHtml(error || 'Unknown')}`
+      : `${emoji} <b>RECOVERED</b>: ${escapeHtml(monitor.name)}\n${escapeHtml(monitor.url)}`;
 
   // Chain sends sequentially with a small gap to avoid rate limiting
   sendQueue = sendQueue.then(async () => {

@@ -12,10 +12,13 @@ export type Env = {
   ACCESS_AUD: string;
 };
 
+export type CfAuthType = 'global_key' | 'token';
+
 export interface CfAccount {
   id: number;
   name: string;
   email: string;
+  auth_type: CfAuthType;
   api_key: string;
   is_active: number;
   created_at: string;

@@ -1,4 +1,5 @@
 import type { Env, Monitor } from '../types';
+import { escapeHtml } from '../utils';
 
 export async function sendEmailAlert(
   env: Env,
@@ -12,9 +13,9 @@ export async function sendEmailAlert(
       : `[RECOVERED] ${monitor.name} is back online`;
 
   const html = `
-    <h2>${subject}</h2>
-    <p><strong>URL:</strong> ${monitor.url}</p>
-    ${error ? `<p><strong>Error:</strong> ${error}</p>` : ''}
+    <h2>${escapeHtml(subject)}</h2>
+    <p><strong>URL:</strong> ${escapeHtml(monitor.url)}</p>
+    ${error ? `<p><strong>Error:</strong> ${escapeHtml(error)}</p>` : ''}
     <p><strong>Time:</strong> ${new Date().toISOString()}</p>
   `;
 

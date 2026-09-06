@@ -12,6 +12,28 @@ interface CFResponse {
   success: boolean;
 }
 
+/**
+ * Auth headers for the Cloudflare API.
+ *
+ * Scoped API tokens (Zone:Read) are the supported path; this endpoint only
+ * needs to list zones, and a Global API Key would grant full account control
+ * to anything that can read this database. Legacy Global Key rows keep working
+ * so an existing install is not broken by the upgrade.
+ */
+function cfAuthHeaders(account: CfAccount): Record<string, string> {
+  if (account.auth_type === 'token') {
+    return {
+      Authorization: `Bearer ${account.api_key}`,
+      'Content-Type': 'application/json',
+    };
+  }
+  return {
+    'X-Auth-Email': account.email,
+    'X-Auth-Key': account.api_key,
+    'Content-Type': 'application/json',
+  };
+}
+
 async function fetchZonesForAccount(account: CfAccount): Promise<{ name: string; url: string }[]> {
   const domains: { name: string; url: string }[] = [];
   let page = 1;
@@ -19,13 +41,7 @@ async function fetchZonesForAccount(account: CfAccount): Promise<{ name: string;
   while (true) {
     const resp = await fetch(
       `https://api.cloudflare.com/client/v4/zones?per_page=50&page=${page}&status=active`,
-      {
-        headers: {
-          'X-Auth-Email': account.email,
-          'X-Auth-Key': account.api_key,
-          'Content-Type': 'application/json',
-        },
-      }
+      { headers: cfAuthHeaders(account) }
     );
 
     const data = await resp.json() as CFResponse;
@@ -52,6 +68,7 @@ export async function syncZones(env: Env): Promise<void> {
       id: 0,
       name: 'Default',
       email: env.CLOUDFLARE_EMAIL,
+      auth_type: 'global_key',
       api_key: env.CLOUDFLARE_API_KEY,
       is_active: 1,
       created_at: '',

@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { getMonitorStats, getRecentChecks } from '../db/queries';
 import { layout } from './layout';
+import { escapeHtml, safeHref } from '../utils';
 
 export async function renderDashboard(env: Env): Promise<string> {
   const stats = await getMonitorStats(env);
@@ -40,8 +41,8 @@ export async function renderDashboard(env: Env): Promise<string> {
         } else {
           const cls = check.is_up ? 'seg-up' : 'seg-down';
           const title = check.is_up
-            ? `Up — ${check.response_ms}ms`
-            : `Down — ${check.error || 'Error'}`;
+            ? `Up — ${escapeHtml(check.response_ms)}ms`
+            : `Down — ${escapeHtml(check.error || 'Error')}`;
           segments.push(`<div class="seg ${cls}" title="${title}"></div>`);
         }
       }
@@ -50,8 +51,8 @@ export async function renderDashboard(env: Env): Promise<string> {
         <div class="card" style="cursor: pointer;" onclick="if(event.target.tagName!=='A')location.href='/monitor/${m.id}'">
           <div class="card-header">
             <div>
-              <span class="name">${m.name}</span>
-              <a href="${m.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color: #737373; font-size: 13px; margin-left: 8px;">${m.url} &#x2197;</a>
+              <span class="name">${escapeHtml(m.name)}</span>
+              <a href="${safeHref(m.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color: #737373; font-size: 13px; margin-left: 8px;">${escapeHtml(m.url)} &#x2197;</a>
             </div>
             ${statusBadge}
           </div>
@@ -59,7 +60,7 @@ export async function renderDashboard(env: Env): Promise<string> {
           <div class="card-meta">
             <span class="uptime-pct ${pctClass}" style="font-size: 14px;">${uptimePct.toFixed(2)}%</span>
             <span class="response-time">${m.last_response_ms !== null ? m.last_response_ms + 'ms' : '—'}</span>
-            <span class="badge badge-${m.source}" style="font-size: 11px;">${m.source}</span>
+            <span class="badge badge-${escapeHtml(m.source)}" style="font-size: 11px;">${escapeHtml(m.source)}</span>
           </div>
         </div>
       `;
