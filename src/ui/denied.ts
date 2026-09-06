@@ -22,5 +22,5 @@ export function renderDenied(detail: string): string {
         Access-protected URL so you get signed in first.
       </p>
     </div>
-  `);
+  `, false);
 }

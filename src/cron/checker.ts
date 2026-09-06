@@ -1,3 +1,4 @@
+import { parseHttpUrl } from '../utils';
 import type { Env, Monitor, CheckOutcome } from '../types';
 import {
   getActiveMonitors,
@@ -76,7 +77,12 @@ async function fetchFollowingRedirects(
 
     // Drain before moving on so the connection is not left hanging.
     await resp.arrayBuffer().catch(() => {});
-    current = new URL(location, current).toString();
+
+    // A Location header is remote input. Resolve it, then require http(s):
+    // a redirect to another scheme is not something we should be following.
+    const next = parseHttpUrl(new URL(location, current).toString());
+    if (!next) throw new Error(`Redirect to unsupported scheme: ${location}`);
+    current = next.toString();
   }
 
   throw new Error(`Too many redirects (>${MAX_REDIRECTS})`);

@@ -254,3 +254,57 @@ describe('Cloudflare credential scope', () => {
     expect(seen[0]['authorization']).toBeUndefined();
   });
 });
+
+describe('security headers', () => {
+  it('sets them on an authenticated page', async () => {
+    const resp = await authedFetch('/');
+    expect(resp.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(resp.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(resp.headers.get('Referrer-Policy')).toBe('no-referrer');
+    expect(resp.headers.get('Cache-Control')).toBe('no-store');
+    expect(resp.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+    expect(resp.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
+  });
+
+  it('sets them on a denied response too', async () => {
+    const resp = await SELF.fetch('https://test.local/');
+    expect(resp.status).toBe(403);
+    expect(resp.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(resp.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+  });
+
+  it('does not render the app nav on the deny page', async () => {
+    const resp = await SELF.fetch('https://test.local/');
+    const html = await resp.text();
+    expect(html).not.toContain('href="/settings"');
+    expect(html).not.toContain('href="/monitors"');
+  });
+});
+
+describe('redirect handling in the checker', () => {
+  it('refuses to follow a redirect to a non-http scheme', async () => {
+    const id = await insertMonitor(env.DB, 'https://redir.test/', 'Redir');
+
+    const originalFetch = globalThis.fetch;
+    const seen: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : (input as Request).url ?? String(input);
+      seen.push(url);
+      if (url === 'https://redir.test/') {
+        return new Response(null, { status: 302, headers: { location: 'file:///etc/passwd' } });
+      }
+      return new Response('OK', { status: 200 });
+    }) as typeof fetch;
+
+    const { runChecks } = await import('../cron/checker');
+    await runChecks(testEnv);
+    globalThis.fetch = originalFetch;
+
+    expect(seen.some((u) => u.startsWith('file:'))).toBe(false);
+
+    const row = await env.DB.prepare('SELECT current_status, last_error FROM monitors WHERE id = ?')
+      .bind(id).first<{ current_status: number; last_error: string }>();
+    expect(row!.current_status).toBe(0);
+    expect(row!.last_error).toContain('unsupported scheme');
+  });
+});

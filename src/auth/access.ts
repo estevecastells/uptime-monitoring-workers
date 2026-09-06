@@ -51,8 +51,9 @@ function teamIssuer(teamDomain: string): string {
   return `https://${host.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`;
 }
 
-async function getSigningKeys(issuer: string): Promise<Map<string, CryptoKey>> {
-  const fresh = jwksCache
+async function getSigningKeys(issuer: string, forceRefresh = false): Promise<Map<string, CryptoKey>> {
+  const fresh = !forceRefresh
+    && jwksCache
     && jwksCache.issuer === issuer
     && Date.now() - jwksCache.fetchedAt < JWKS_TTL_MS;
   if (fresh) return jwksCache!.keys;
@@ -132,8 +133,16 @@ export async function verifyAccessJwt(token: string, env: Env): Promise<AccessId
   const audiences = Array.isArray(claims.aud) ? claims.aud : claims.aud ? [claims.aud] : [];
   if (!audiences.includes(expectedAud)) return null;
 
-  const keys = await getSigningKeys(issuer);
-  const key = keys.get(header.kid);
+  let keys = await getSigningKeys(issuer);
+  let key = keys.get(header.kid);
+
+  // An unknown kid usually means Access rotated its signing keys while our
+  // cached JWKS was still inside its TTL. Refetch once before rejecting —
+  // otherwise a rotation locks every user out for up to an hour.
+  if (!key && jwksCache) {
+    keys = await getSigningKeys(issuer, true);
+    key = keys.get(header.kid);
+  }
   if (!key) return null;
 
   const verified = await crypto.subtle.verify(

@@ -2,6 +2,12 @@ name = "uptime-monitor"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
+# Version preview URLs (<version>-<worker>.<subdomain>.workers.dev) are NOT
+# covered by an Access application scoped to the main hostname, so leaving them
+# on exposes a route around Zero Trust. The Worker still verifies the Access
+# JWT and rejects those requests, but there is no reason to publish the door.
+preview_urls = false
+
 [vars]
 # Cloudflare Access (Zero Trust). Not secrets — these are public identifiers —
 # but they are account-specific, so they live here rather than in the code.

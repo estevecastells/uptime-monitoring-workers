@@ -4,7 +4,7 @@ import { escapeHtml } from '../utils';
  * `content` is composed HTML and is emitted as-is; `title` is caller data
  * (a monitor name, for instance) and is escaped here so no caller can forget.
  */
-export function layout(title: string, content: string): string {
+export function layout(title: string, content: string, showNav = true): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -121,14 +121,14 @@ export function layout(title: string, content: string): string {
   </style>
 </head>
 <body>
-  <nav>
+  ${showNav ? `<nav>
     <a href="/" class="brand"><svg width="20" height="20" viewBox="0 0 32 32" style="vertical-align: -3px; margin-right: 8px;"><rect width="32" height="32" rx="8" fill="#0a0a0a"/><path d="M4 18h6l3-10 4 16 3-12 2 6h6" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Uptime Monitor</a>
     <div class="links">
       <a href="/">Dashboard</a>
       <a href="/monitors">Monitors</a>
       <a href="/settings">Settings</a>
     </div>
-  </nav>
+  </nav>` : ''}
   <div class="container">${content}</div>
 </body>
 </html>`;

@@ -14,6 +14,41 @@ import { normalizeUrl, parseHttpUrl } from './utils';
 
 const app = new Hono<{ Bindings: Env }>();
 
+// ── Security headers ───────────────────────────────────
+//
+// Runs before auth so even a denied response carries them.
+//
+// The UI has inline <style>, inline <script> and inline onclick handlers, so
+// 'unsafe-inline' is unavoidable without a rewrite. The rest of the policy
+// still earns its place: default-src 'none' means an injected tag cannot pull
+// in an external script or beacon data out, frame-ancestors blocks
+// clickjacking, and base-uri stops a <base> tag from repointing every relative
+// URL on the page. No external resources are loaded — the favicons are data:
+// URIs — so nothing here needs an allowlisted host.
+
+const CSP = [
+  "default-src 'none'",
+  "img-src 'self' data:",
+  "style-src 'unsafe-inline'",
+  "script-src 'unsafe-inline'",
+  "connect-src 'self'",
+  "form-action 'self'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+app.use('*', async (c, next) => {
+  await next();
+  c.header('Content-Security-Policy', CSP);
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'no-referrer');
+  c.header('Cross-Origin-Opener-Policy', 'same-origin');
+  c.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  // The dashboard is private data behind Access; keep it out of shared caches.
+  c.header('Cache-Control', 'no-store');
+});
+
 // ── Auth (Cloudflare Access / Zero Trust) ──────────────
 //
 // There is no in-app login. Access authenticates users at the edge before the
@@ -131,7 +166,10 @@ app.post('/api/monitors', async (c) => {
     if (msg.includes('UNIQUE')) {
       return c.json({ error: 'Monitor already exists' }, 409);
     }
-    return c.json({ error: msg }, 500);
+    // Don't hand the raw database error back to the client; it leaks schema
+    // and driver details for no operational benefit.
+    console.error('Failed to insert monitor:', msg);
+    return c.json({ error: 'Could not create monitor' }, 500);
   }
 
   return c.json({ ok: true }, 201);
