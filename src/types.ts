@@ -6,6 +6,7 @@ export type Env = {
   RESEND: string;
   DASHBOARD_PASSWORD: string;
   ALERT_EMAIL: string;
+  UPTIME_TOKEN?: string;
 };
 
 export interface CfAccount {

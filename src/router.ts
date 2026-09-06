@@ -176,6 +176,24 @@ app.post('/api/monitors/:id/toggle', async (c) => {
   return c.json({ ok: true });
 });
 
+app.post('/api/monitors/:id/notify', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
+
+  const body = await c.req.json<{ notify_email?: boolean; notify_telegram?: boolean }>();
+  if (body.notify_email !== undefined) {
+    await c.env.DB.prepare(
+      "UPDATE monitors SET notify_email = ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(body.notify_email ? 1 : 0, id).run();
+  }
+  if (body.notify_telegram !== undefined) {
+    await c.env.DB.prepare(
+      "UPDATE monitors SET notify_telegram = ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(body.notify_telegram ? 1 : 0, id).run();
+  }
+  return c.json({ ok: true });
+});
+
 app.get('/api/monitors/:id/checks', async (c) => {
   const id = parseInt(c.req.param('id'));
   if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);

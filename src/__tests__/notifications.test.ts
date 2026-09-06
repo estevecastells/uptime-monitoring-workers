@@ -11,6 +11,8 @@ const mockMonitor: Monitor = {
   is_active: 1,
   created_at: '2024-01-01',
   updated_at: '2024-01-01',
+  notify_email: 0,
+  notify_telegram: 1,
 };
 
 const originalFetch = globalThis.fetch;

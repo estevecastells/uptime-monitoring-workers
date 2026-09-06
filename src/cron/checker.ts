@@ -38,17 +38,22 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function attemptFetch(
-  url: string
+  url: string,
+  uptimeToken?: string
 ): Promise<{ statusCode: number | null; responseMs: number; outcome: CheckOutcome; error: string | null }> {
   const start = Date.now();
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
+    const headers: Record<string, string> = { 'User-Agent': 'UptimeBot/1.0' };
+    if (uptimeToken) {
+      headers['X-Uptime-Token'] = uptimeToken;
+    }
     const resp = await fetch(url, {
       method: 'GET',
       redirect: 'follow',
       signal: controller.signal,
-      headers: { 'User-Agent': 'UptimeBot/1.0' },
+      headers,
       cf: { cacheTtlByStatus: { '100-599': -1 } },
     });
     clearTimeout(timeout);
@@ -71,14 +76,14 @@ async function attemptFetch(
 }
 
 async function checkSingle(env: Env, monitor: Monitor): Promise<void> {
-  let result = await attemptFetch(monitor.url);
+  let result = await attemptFetch(monitor.url, env.UPTIME_TOKEN);
 
   // Retry on failure: only 'down' results trigger retries.
   // A single 'up' or 'unknown' aborts the retry loop immediately.
   if (result.outcome === 'down') {
     for (const delay of RETRY_DELAYS_MS) {
       await sleep(delay);
-      result = await attemptFetch(monitor.url);
+      result = await attemptFetch(monitor.url, env.UPTIME_TOKEN);
       if (result.outcome !== 'down') break;
     }
   }

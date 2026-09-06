@@ -88,6 +88,14 @@ export async function renderDetail(env: Env, id: number): Promise<string> {
         <button onclick="saveEdit(${monitor.id})">Save</button>
         <button class="btn-ghost" onclick="hideEdit()">Cancel</button>
       </div>
+      <div style="margin-top: 10px; display: flex; gap: 16px; font-size: 13px; color: #a3a3a3;">
+        <label style="cursor: pointer;" title="Email notifications">
+          <input type="checkbox" id="notifyEmail" ${monitor.notify_email ? 'checked' : ''} onchange="toggleNotify(${monitor.id}, 'notify_email', this.checked)" style="vertical-align: middle;" /> Email alerts
+        </label>
+        <label style="cursor: pointer;" title="Telegram notifications">
+          <input type="checkbox" id="notifyTelegram" ${monitor.notify_telegram ? 'checked' : ''} onchange="toggleNotify(${monitor.id}, 'notify_telegram', this.checked)" style="vertical-align: middle;" /> Telegram alerts
+        </label>
+      </div>
       <div id="editMsg" style="margin-top: 8px; font-size: 13px;"></div>
     </div>
 
@@ -127,6 +135,13 @@ export async function renderDetail(env: Env, id: number): Promise<string> {
     <script>
     function showEdit() { document.getElementById('editForm').style.display = 'block'; }
     function hideEdit() { document.getElementById('editForm').style.display = 'none'; }
+    async function toggleNotify(id, field, value) {
+      await fetch('/api/monitors/' + id + '/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      });
+    }
     async function saveEdit(id) {
       const url = document.getElementById('editUrl').value;
       const name = document.getElementById('editName').value;

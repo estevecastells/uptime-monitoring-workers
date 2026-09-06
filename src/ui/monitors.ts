@@ -18,6 +18,10 @@ export async function renderMonitors(env: Env): Promise<string> {
           <td>
             ${m.is_active ? '<span class="badge badge-up">Active</span>' : '<span class="badge badge-unknown">Paused</span>'}
           </td>
+          <td style="white-space: nowrap;">
+            <button class="notify-pill${m.notify_email ? ' notify-on' : ''}" data-id="${m.id}" data-field="notify_email" onclick="toggleNotify(this)">Email</button>
+            <button class="notify-pill${m.notify_telegram ? ' notify-on' : ''}" data-id="${m.id}" data-field="notify_telegram" onclick="toggleNotify(this)">TG</button>
+          </td>
           <td style="text-align: right;">
             <button class="btn-ghost" style="padding: 4px 12px; font-size: 12px;" onclick="toggleMonitor(${m.id})">${m.is_active ? 'Pause' : 'Resume'}</button>
             <button class="btn-danger" style="padding: 4px 12px; font-size: 12px; margin-left: 6px;" onclick="deleteMonitor(${m.id})">Delete</button>
@@ -25,7 +29,7 @@ export async function renderMonitors(env: Env): Promise<string> {
         </tr>`
         )
         .join('')
-    : '<tr><td colspan="5" style="text-align: center; color: #525252; padding: 20px;">No monitors yet</td></tr>';
+    : '<tr><td colspan="6" style="text-align: center; color: #525252; padding: 20px;">No monitors yet</td></tr>';
 
   const content = `
     <h1>Monitors</h1>
@@ -49,7 +53,7 @@ export async function renderMonitors(env: Env): Promise<string> {
 
     <div class="card" style="padding: 0; overflow-x: auto;">
       <table>
-        <tr><th>Name</th><th>URL</th><th>Source</th><th>Status</th><th></th></tr>
+        <tr><th>Name</th><th>URL</th><th>Source</th><th>Status</th><th>Notify</th><th></th></tr>
         ${rows}
       </table>
     </div>
@@ -83,6 +87,15 @@ export async function renderMonitors(env: Env): Promise<string> {
         msg.style.color = '#f87171';
       }
     });
+
+    async function toggleNotify(btn) {
+      const on = btn.classList.toggle('notify-on');
+      await fetch('/api/monitors/' + btn.dataset.id + '/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [btn.dataset.field]: on }),
+      });
+    }
 
     async function toggleMonitor(id) {
       await fetch('/api/monitors/' + id + '/toggle', { method: 'POST' });

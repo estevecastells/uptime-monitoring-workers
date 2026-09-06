@@ -97,6 +97,16 @@ export function layout(title: string, content: string): string {
 
     .flex-between { display: flex; justify-content: space-between; align-items: center; }
 
+    .notify-pill {
+      display: inline-block; padding: 2px 10px; border-radius: 100px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+      background: #1a1a1a; color: #525252; border: 1px solid #262626;
+      cursor: pointer; margin-right: 4px; transition: all 0.15s;
+    }
+    .notify-pill:hover { border-color: #404040; color: #737373; }
+    .notify-pill.notify-on { background: #052e16; color: #4ade80; border-color: #14532d; }
+    .notify-pill.notify-on:hover { background: #14532d; }
+
     @media (max-width: 640px) {
       .grid-2 { grid-template-columns: 1fr; }
       .form-row { flex-direction: column; }
