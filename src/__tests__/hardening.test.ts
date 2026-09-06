@@ -308,3 +308,76 @@ describe('redirect handling in the checker', () => {
     expect(row!.last_error).toContain('unsupported scheme');
   });
 });
+
+describe('URLs with embedded credentials', () => {
+  it('rejects userinfo so a password never reaches the database', () => {
+    expect(parseHttpUrl('https://admin:hunter2@internal.test/health')).toBeNull();
+    expect(parseHttpUrl('https://admin@internal.test/health')).toBeNull();
+  });
+
+  it('still accepts an @ that is only in the path or query', () => {
+    expect(parseHttpUrl('https://ok.test/users/me@example.com')).not.toBeNull();
+    expect(parseHttpUrl('https://ok.test/?email=me@example.com')).not.toBeNull();
+  });
+
+  it('rejects them at the API boundary', async () => {
+    const resp = await authedFetch('/api/monitors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'https://admin:hunter2@internal.test' }),
+    });
+    expect(resp.status).toBe(400);
+
+    const row = await env.DB.prepare("SELECT COUNT(*) c FROM monitors WHERE url LIKE '%hunter2%'")
+      .first<{ c: number }>();
+    expect(row!.c).toBe(0);
+  });
+});
+
+describe('alert delivery failures are visible but never leak the token', () => {
+  const alertEnv = { ...testEnv, TELEGRAM: 'SECRETBOTTOKEN|-100123' } as import('../types').Env;
+  const monitor = {
+    id: 1, url: 'https://a.test', name: 'A', source: 'manual', is_active: 1,
+    created_at: '', updated_at: '', notify_email: 0, notify_telegram: 1,
+    current_status: 0, last_response_ms: null, last_status_code: null,
+    last_error: null, last_checked_at: null, last_logged_at: null,
+    last_status_change_at: null, consecutive_downs: 1,
+  } as unknown as import('../types').Monitor;
+
+  it('logs a rejected Telegram send without printing the bot token', async () => {
+    const originalFetch = globalThis.fetch;
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => { errors.push(args.map(String).join(' ')); };
+
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ ok: false, description: 'Bad Request: chat not found' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof fetch;
+
+    const { sendTelegramAlert } = await import('../notifications/telegram');
+    await sendTelegramAlert(alertEnv, monitor, 'down', 'boom');
+
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+
+    const joined = errors.join('\n');
+    expect(joined).toContain('HTTP 400');
+    expect(joined).toContain('chat not found');
+    expect(joined).not.toContain('SECRETBOTTOKEN');
+  });
+
+  it('does not throw when Telegram is unreachable', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalError = console.error;
+    console.error = () => {};
+    globalThis.fetch = (async () => { throw new Error('network down'); }) as typeof fetch;
+
+    const { sendTelegramAlert } = await import('../notifications/telegram');
+    await expect(sendTelegramAlert(alertEnv, monitor, 'down', 'boom')).resolves.toBeUndefined();
+
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  });
+});

@@ -24,11 +24,19 @@ export function escapeHtml(value: unknown): string {
 const SAFE_SCHEMES = new Set(['http:', 'https:']);
 
 /**
- * Parse a URL and require an http(s) scheme.
+ * Parse a URL and require an http(s) scheme with no embedded credentials.
  *
  * `new URL()` alone is not validation: it happily accepts `javascript:alert(1)`
  * and `file:///etc/passwd`, which would then be stored, rendered into an href,
  * and handed to fetch().
+ *
+ * Userinfo (`https://user:pass@host`) is rejected as well. A password there
+ * would be written to the database in clear, printed into the dashboard and
+ * its href, and — worst of all — copied into every Telegram and email alert
+ * about that monitor. There is no way to monitor such a URL without spreading
+ * the secret, so the URL is refused rather than silently stripped: quietly
+ * dropping the credentials would just turn it into a check that fails to
+ * authenticate.
  */
 export function parseHttpUrl(raw: string): URL | null {
   let parsed: URL;
@@ -37,7 +45,9 @@ export function parseHttpUrl(raw: string): URL | null {
   } catch {
     return null;
   }
-  return SAFE_SCHEMES.has(parsed.protocol) ? parsed : null;
+  if (!SAFE_SCHEMES.has(parsed.protocol)) return null;
+  if (parsed.username || parsed.password) return null;
+  return parsed;
 }
 
 /**

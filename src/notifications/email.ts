@@ -19,7 +19,7 @@ export async function sendEmailAlert(
     <p><strong>Time:</strong> ${new Date().toISOString()}</p>
   `;
 
-  await fetch('https://api.resend.com/emails', {
+  const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.RESEND}`,
@@ -32,4 +32,19 @@ export async function sendEmailAlert(
       html,
     }),
   });
+
+  // Same reasoning as the Telegram path: a rejected alert must be visible in
+  // the logs rather than disappearing. The API key is a header, not part of
+  // the URL or body echoed here.
+  if (!resp.ok) {
+    let detail = '(no body)';
+    try {
+      detail = JSON.stringify(await resp.json());
+    } catch {
+      // keep the placeholder
+    }
+    console.error(
+      `Email alert for "${monitor.name}" (${status}) failed: HTTP ${resp.status} — ${detail}`
+    );
+  }
 }
