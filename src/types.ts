@@ -4,9 +4,12 @@ export type Env = {
   CLOUDFLARE_EMAIL?: string;
   TELEGRAM: string;
   RESEND: string;
-  DASHBOARD_PASSWORD: string;
   ALERT_EMAIL: string;
   UPTIME_TOKEN?: string;
+  // Cloudflare Access (Zero Trust). Both are required for the dashboard to
+  // serve anything — see src/auth/access.ts.
+  ACCESS_TEAM_DOMAIN: string;
+  ACCESS_AUD: string;
 };
 
 export interface CfAccount {

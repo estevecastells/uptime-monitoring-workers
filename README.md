@@ -10,7 +10,7 @@ A free, open-source uptime monitoring tool that runs entirely on **Cloudflare Wo
 - **Manual monitors** — add any URL through the dashboard
 - **5-minute checks** — HTTP health checks with response time tracking
 - **1-minute re-checks** — down sites are re-checked every minute for faster detection
-- **Password-protected dashboard** — dark-themed UI with uptime bars, response time charts, and incident history
+- **Zero Trust dashboard** — gated by Cloudflare Access, with a dark-themed UI showing uptime bars, response time charts, and incident history
 - **Telegram alerts** — instant notifications when a site goes down or recovers
 - **Email alerts** — via Resend API
 - **Smart alerting** — requires 2 consecutive failures before alerting (no false positives, ~1 min detection)
@@ -66,8 +66,10 @@ npx wrangler secret put CLOUDFLARE_EMAIL       # Your CF account email
 npx wrangler secret put TELEGRAM               # Format: BOT_TOKEN|CHAT_ID
 npx wrangler secret put RESEND                 # Your Resend API key
 npx wrangler secret put ALERT_EMAIL            # Email address to receive alerts
-npx wrangler secret put DASHBOARD_PASSWORD     # Password to access the dashboard
 ```
+
+There is no dashboard password: access is handled by Cloudflare Access, set up
+in step 5.
 
 #### Getting your Telegram credentials
 
@@ -80,24 +82,63 @@ npx wrangler secret put DASHBOARD_PASSWORD     # Password to access the dashboar
 
 On the free tier without a verified domain, Resend only delivers to the email address you signed up with. To send to any address, [verify a domain](https://resend.com/domains) in your Resend dashboard and add the required DNS records.
 
-### 5. Deploy
+### 5. Put Cloudflare Access in front of the Worker
+
+The dashboard has no built-in login. It authenticates users with
+[Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/)
+(free tier is enough), which signs users in at the edge before a request ever
+reaches the Worker. **Set this up before deploying** — without it the Worker
+correctly refuses every request.
+
+1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/)
+2. **Access > Applications > Add an application > Self-hosted**
+3. Set the application domain to your Worker hostname, e.g.
+   `uptime-monitor.<your-subdomain>.workers.dev`
+4. Add a policy — for a personal instance, an *Allow* policy including just
+   your own email address
+5. Open the application's **Overview** tab and copy the **Application Audience
+   (AUD) Tag**
+6. Put that tag, and your team domain, in `wrangler.toml`:
+
+```toml
+[vars]
+ACCESS_TEAM_DOMAIN = "your-team.cloudflareaccess.com"
+ACCESS_AUD = "your-access-application-aud-tag"
+```
+
+Neither value is a secret — the AUD tag is useless without a token signed by
+your team's private key — so they live in `wrangler.toml` rather than in
+`wrangler secret`.
+
+### 6. Deploy
 
 ```bash
 npx wrangler deploy
 ```
 
-Your monitor is now live at `https://uptime-monitor.<your-subdomain>.workers.dev`
+Your monitor is now live at `https://uptime-monitor.<your-subdomain>.workers.dev`,
+and visiting it redirects you through your identity provider first.
 
 ## Dashboard Authentication
 
-The dashboard is protected by a password (the `DASHBOARD_PASSWORD` secret). When you visit the URL, you'll see a login screen. Sessions last 30 days.
+Authentication is entirely delegated to Cloudflare Access. The Worker verifies
+the JWT that Access attaches to each request (`Cf-Access-Jwt-Assertion`),
+checking the RS256 signature against your team's published keys plus the
+`aud`, `iss` and `exp` claims — see [`src/auth/access.ts`](src/auth/access.ts).
 
-For additional security, you can also put [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/) (free) in front of it:
+Two things worth knowing:
 
-1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/)
-2. **Access > Applications > Add an application**
-3. Choose **Self-hosted**, enter your worker URL
-4. Create a policy (e.g., allow your email address)
+- **The signature is what is trusted, not the headers.** Access also sends a
+  convenient `Cf-Access-Authenticated-User-Email` header, but any client that
+  reaches the Worker outside of Access can set that header to anything. Since a
+  Worker stays reachable on its `workers.dev` hostname, trusting the header
+  alone would be one misconfiguration away from no authentication at all.
+- **The allowlist lives only in the Access policy.** There is no list of
+  permitted emails in this codebase, so adding or removing a user is a change
+  in one place and needs no deploy.
+
+To revoke someone's access, remove them from the Access policy; their session
+stops working as soon as their current token expires.
 
 ## Local Development
 
@@ -109,8 +150,12 @@ CLOUDFLARE_EMAIL=your@email.com
 TELEGRAM=bot-token|chat-id
 RESEND=re_your-resend-key
 ALERT_EMAIL=your@email.com
-DASHBOARD_PASSWORD=your-password
 ```
+
+Local `wrangler dev` runs without Access in front of it, so the Worker has no
+JWT to verify and will refuse requests. Point `ACCESS_TEAM_DOMAIN`/`ACCESS_AUD`
+at a real application and copy a `CF_Authorization` cookie from the deployed
+dashboard when you need to exercise authenticated routes locally.
 
 Then run:
 

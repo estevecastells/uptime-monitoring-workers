@@ -1,70 +1,73 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { env, createExecutionContext, SELF } from 'cloudflare:test';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { env, SELF } from 'cloudflare:test';
 import { applyMigrations, resetDB, insertMonitor } from './setup';
-import worker from '../index';
+import { mintAccessToken, stubJwksEndpoint } from './access-helpers';
 
-const testEnv = env as unknown as import('../types').Env;
+let restoreFetch: () => void;
+let accessToken: string;
 
-// Helper: make an authenticated request
+// Helper: make a request carrying a valid Access JWT
 async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
-  // First, login to get a session cookie
-  const loginResp = await SELF.fetch(`https://test.local/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `password=${env.DASHBOARD_PASSWORD}`,
-    redirect: 'manual',
-  });
-  const cookies = loginResp.headers.get('set-cookie') || '';
-
   return SELF.fetch(`https://test.local${path}`, {
     ...init,
     headers: {
       ...(init?.headers || {}),
-      Cookie: cookies,
+      'Cf-Access-Jwt-Assertion': accessToken,
     },
   });
 }
 
 beforeAll(async () => {
   await applyMigrations();
+  restoreFetch = await stubJwksEndpoint();
+  accessToken = await mintAccessToken();
+});
+
+afterAll(() => {
+  restoreFetch();
 });
 
 beforeEach(async () => {
   await resetDB();
 });
 
-describe('Auth', () => {
-  it('redirects to /login when not authenticated', async () => {
-    const resp = await SELF.fetch('https://test.local/', { redirect: 'manual' });
-    expect(resp.status).toBe(302);
-    expect(resp.headers.get('location')).toBe('/login');
+describe('Auth (Cloudflare Access)', () => {
+  it('denies a request with no Access token', async () => {
+    const resp = await SELF.fetch('https://test.local/');
+    expect(resp.status).toBe(403);
   });
 
-  it('login page is accessible without auth', async () => {
-    const resp = await SELF.fetch('https://test.local/login');
+  it('denies a request whose token is signed by another key', async () => {
+    const forged = await mintAccessToken({ useWrongKey: true });
+    const resp = await SELF.fetch('https://test.local/', {
+      headers: { 'Cf-Access-Jwt-Assertion': forged },
+    });
+    expect(resp.status).toBe(403);
+  });
+
+  it('denies a token minted for a different Access application', async () => {
+    const otherApp = await mintAccessToken({ aud: 'a-different-apps-aud' });
+    const resp = await SELF.fetch('https://test.local/', {
+      headers: { 'Cf-Access-Jwt-Assertion': otherApp },
+    });
+    expect(resp.status).toBe(403);
+  });
+
+  it('ignores a spoofed identity header without a valid JWT', async () => {
+    const resp = await SELF.fetch('https://test.local/', {
+      headers: { 'Cf-Access-Authenticated-User-Email': 'owner@example.com' },
+    });
+    expect(resp.status).toBe(403);
+  });
+
+  it('allows a request with a valid Access token', async () => {
+    const resp = await authedFetch('/');
     expect(resp.status).toBe(200);
-    const text = await resp.text();
-    expect(text).toContain('password');
   });
 
-  it('login with correct password sets session cookie', async () => {
-    const resp = await SELF.fetch('https://test.local/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `password=${env.DASHBOARD_PASSWORD}`,
-      redirect: 'manual',
-    });
-    expect(resp.status).toBe(302);
-    expect(resp.headers.get('set-cookie')).toContain('session=');
-  });
-
-  it('login with wrong password returns 401', async () => {
-    const resp = await SELF.fetch('https://test.local/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'password=wrong',
-    });
-    expect(resp.status).toBe(401);
+  it('protects API routes too, not just the UI', async () => {
+    const resp = await SELF.fetch('https://test.local/api/stats');
+    expect(resp.status).toBe(403);
   });
 });
 

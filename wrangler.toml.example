@@ -2,6 +2,15 @@ name = "uptime-monitor"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
+[vars]
+# Cloudflare Access (Zero Trust). Not secrets — these are public identifiers —
+# but they are account-specific, so they live here rather than in the code.
+# ACCESS_TEAM_DOMAIN: your Zero Trust team domain.
+# ACCESS_AUD: the Application Audience (AUD) tag of the Access application
+#   protecting this Worker. Zero Trust > Access > Applications > (app) > Overview.
+ACCESS_TEAM_DOMAIN = "your-team.cloudflareaccess.com"
+ACCESS_AUD = "your-access-application-aud-tag"
+
 [triggers]
 crons = [
   "* * * * *",

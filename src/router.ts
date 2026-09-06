@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
-import { getCookie, setCookie } from 'hono/cookie';
 import type { Env } from './types';
 import { renderDashboard } from './ui/dashboard';
 import { renderDetail } from './ui/detail';
 import { renderSettings } from './ui/settings';
 import { renderMonitors } from './ui/monitors';
-import { renderLogin } from './ui/login';
+import { renderDenied } from './ui/denied';
+import { verifyAccessJwt, readAccessToken } from './auth/access';
 import { getSetting, setSetting } from './db/queries';
 import { getMonitorStats, getRecentChecks } from './db/queries';
 import { getAllCfAccounts, addCfAccount, deleteCfAccount, toggleCfAccount } from './db/queries';
@@ -14,52 +14,36 @@ import { normalizeUrl } from './utils';
 
 const app = new Hono<{ Bindings: Env }>();
 
-// ── Auth ───────────────────────────────────────────────
+// ── Auth (Cloudflare Access / Zero Trust) ──────────────
+//
+// There is no in-app login. Access authenticates users at the edge before the
+// request reaches this Worker, and the middleware below verifies the signed
+// JWT it attaches. See src/auth/access.ts for what is verified and why the
+// signature — not the `Cf-Access-Authenticated-User-Email` header — is the
+// thing we trust.
+//
+// Who may sign in is defined by the Access application policy in the
+// Cloudflare Zero Trust dashboard, so the allowlist lives in exactly one place
+// and is not duplicated here.
 
-async function hashToken(value: string): Promise<string> {
-  const data = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-app.get('/login', async (c) => {
-  return c.html(renderLogin());
-});
-
-app.post('/login', async (c) => {
-  const body = await c.req.parseBody();
-  const password = body['password'] as string;
-
-  if (password === c.env.DASHBOARD_PASSWORD) {
-    const sessionValue = await hashToken(c.env.DASHBOARD_PASSWORD);
-    setCookie(c, 'session', sessionValue, {
-      path: '/',
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Lax',
-      maxAge: 60 * 60 * 24 * 30,
-    });
-    return c.redirect('/');
+app.use('*', async (c, next) => {
+  const token = readAccessToken(c.req.raw);
+  if (!token) {
+    return c.html(renderDenied('No Access token was present on this request.'), 403);
   }
 
-  return c.html(renderLogin('Invalid password'), 401);
-});
+  let identity;
+  try {
+    identity = await verifyAccessJwt(token, c.env);
+  } catch (err) {
+    // Misconfiguration (missing bindings) or the JWKS endpoint being
+    // unreachable. Fail closed rather than serving the dashboard.
+    console.error('Access verification error:', err);
+    return c.html(renderDenied('Access verification is unavailable right now.'), 503);
+  }
 
-app.get('/logout', (c) => {
-  setCookie(c, 'session', '', { path: '/', maxAge: 0 });
-  return c.redirect('/login');
-});
-
-// Auth middleware — protect everything except /login
-app.use('*', async (c, next) => {
-  const path = new URL(c.req.url).pathname;
-  if (path === '/login') return next();
-
-  const session = getCookie(c, 'session');
-  const expected = await hashToken(c.env.DASHBOARD_PASSWORD);
-
-  if (session !== expected) {
-    return c.redirect('/login');
+  if (!identity) {
+    return c.html(renderDenied('Your Access token is not valid for this application.'), 403);
   }
 
   return next();
