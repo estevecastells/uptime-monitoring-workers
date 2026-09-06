@@ -37,6 +37,51 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const MAX_REDIRECTS = 5;
+
+/**
+ * Follow redirects by hand so the uptime token is never replayed off-origin.
+ *
+ * With `redirect: 'follow'` the runtime re-sends our headers to whatever host
+ * the Location points at, so a monitored site redirecting to a third party
+ * would hand `X-Uptime-Token` straight to it — and a monitored origin is not
+ * necessarily one we control. Following manually lets us re-attach the token
+ * only while we are still talking to the host the check started on.
+ */
+async function fetchFollowingRedirects(
+  url: string,
+  uptimeToken: string | undefined,
+  signal: AbortSignal
+): Promise<Response> {
+  const originalHost = new URL(url).host;
+  let current = url;
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const headers: Record<string, string> = { 'User-Agent': 'UptimeBot/1.0' };
+    if (uptimeToken && new URL(current).host === originalHost) {
+      headers['X-Uptime-Token'] = uptimeToken;
+    }
+
+    const resp = await fetch(current, {
+      method: 'GET',
+      redirect: 'manual',
+      signal,
+      headers,
+      cf: { cacheTtlByStatus: { '100-599': -1 } },
+    });
+
+    const isRedirect = resp.status >= 300 && resp.status < 400;
+    const location = isRedirect ? resp.headers.get('location') : null;
+    if (!location) return resp;
+
+    // Drain before moving on so the connection is not left hanging.
+    await resp.arrayBuffer().catch(() => {});
+    current = new URL(location, current).toString();
+  }
+
+  throw new Error(`Too many redirects (>${MAX_REDIRECTS})`);
+}
+
 async function attemptFetch(
   url: string,
   uptimeToken?: string
@@ -45,17 +90,7 @@ async function attemptFetch(
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
-    const headers: Record<string, string> = { 'User-Agent': 'UptimeBot/1.0' };
-    if (uptimeToken) {
-      headers['X-Uptime-Token'] = uptimeToken;
-    }
-    const resp = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      signal: controller.signal,
-      headers,
-      cf: { cacheTtlByStatus: { '100-599': -1 } },
-    });
+    const resp = await fetchFollowingRedirects(url, uptimeToken, controller.signal);
     clearTimeout(timeout);
     // Drain the body to avoid hanging connections in Workers
     await resp.arrayBuffer().catch(() => {});

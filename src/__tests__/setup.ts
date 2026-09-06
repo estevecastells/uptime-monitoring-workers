@@ -37,9 +37,18 @@ export async function applyMigrations(): Promise<void> {
     "INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_days', '7');"
   );
 
+  // Added by migration 0005 — multi-account zone sync.
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS cf_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL, api_key TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')));"
+  );
+
+  // Added by migration 0006 — per-monitor notification channel toggles.
   // Added by migration 0007 — state tracking columns so we can write sparse
   // rows to `checks` and derive uptime from `monitors` directly.
   const stateCols: Array<[string, string]> = [
+    ['cf_account_id', 'INTEGER'],
+    ['notify_email', 'INTEGER NOT NULL DEFAULT 0'],
+    ['notify_telegram', 'INTEGER NOT NULL DEFAULT 1'],
     ['current_status', 'INTEGER'],
     ['last_response_ms', 'INTEGER'],
     ['last_status_code', 'INTEGER'],
@@ -63,6 +72,7 @@ export async function resetDB(): Promise<void> {
   await env.DB.exec('DELETE FROM incidents;');
   await env.DB.exec('DELETE FROM checks;');
   await env.DB.exec('DELETE FROM monitors;');
+  await env.DB.exec('DELETE FROM cf_accounts;');
   await env.DB.exec("DELETE FROM settings; INSERT INTO settings (key, value) VALUES ('retention_days', '7');");
 }
 

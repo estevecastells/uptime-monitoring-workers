@@ -179,3 +179,72 @@ describe('Incident logic', () => {
     expect(result!.count).toBe(1);
   });
 });
+
+describe('uptime token scoping', () => {
+  const tokenEnv = { ...testEnv, UPTIME_TOKEN: 'super-secret-token' } as import('../types').Env;
+
+  it('sends the token to the monitored origin', async () => {
+    await insertMonitor(env.DB, 'https://origin.test/health', 'Origin');
+
+    const calls: Array<{ url: string; token: string | null }> = [];
+    globalThis.fetch = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : (input as Request).url ?? String(input);
+      const headers = new Headers(init?.headers);
+      calls.push({ url, token: headers.get('X-Uptime-Token') });
+      return Promise.resolve(new Response('OK', { status: 200 }));
+    });
+
+    await runChecks(tokenEnv);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].token).toBe('super-secret-token');
+  });
+
+  it('does NOT forward the token when a redirect leaves the original host', async () => {
+    await insertMonitor(env.DB, 'https://origin.test/health', 'Origin');
+
+    const calls: Array<{ url: string; token: string | null }> = [];
+    globalThis.fetch = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : (input as Request).url ?? String(input);
+      const headers = new Headers(init?.headers);
+      calls.push({ url, token: headers.get('X-Uptime-Token') });
+
+      if (url === 'https://origin.test/health') {
+        return Promise.resolve(
+          new Response(null, { status: 302, headers: { location: 'https://evil.test/collect' } })
+        );
+      }
+      return Promise.resolve(new Response('OK', { status: 200 }));
+    });
+
+    await runChecks(tokenEnv);
+
+    const offOrigin = calls.find((c) => c.url.startsWith('https://evil.test'));
+    expect(offOrigin).toBeDefined();
+    expect(offOrigin!.token).toBeNull();
+  });
+
+  it('still sends the token across a same-host redirect', async () => {
+    await insertMonitor(env.DB, 'https://origin.test/health', 'Origin');
+
+    const calls: Array<{ url: string; token: string | null }> = [];
+    globalThis.fetch = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : (input as Request).url ?? String(input);
+      const headers = new Headers(init?.headers);
+      calls.push({ url, token: headers.get('X-Uptime-Token') });
+
+      if (url === 'https://origin.test/health') {
+        return Promise.resolve(
+          new Response(null, { status: 301, headers: { location: '/health/v2' } })
+        );
+      }
+      return Promise.resolve(new Response('OK', { status: 200 }));
+    });
+
+    await runChecks(tokenEnv);
+
+    const second = calls.find((c) => c.url === 'https://origin.test/health/v2');
+    expect(second).toBeDefined();
+    expect(second!.token).toBe('super-secret-token');
+  });
+});
