@@ -61,8 +61,8 @@ npx wrangler d1 migrations apply uptime-monitor-db --remote
 ### 4. Set your secrets
 
 ```bash
-npx wrangler secret put CLOUDFLARE_API_KEY     # Your CF Global API key
-npx wrangler secret put CLOUDFLARE_EMAIL       # Your CF account email
+npx wrangler secret put CLOUDFLARE_API_KEY     # CF API token with Zone:Read
+npx wrangler secret put CLOUDFLARE_EMAIL       # Your CF account email (legacy Global Key only)
 npx wrangler secret put TELEGRAM               # Format: BOT_TOKEN|CHAT_ID
 npx wrangler secret put RESEND                 # Your Resend API key
 npx wrangler secret put ALERT_EMAIL            # Email address to receive alerts
@@ -118,6 +118,26 @@ npx wrangler deploy
 
 Your monitor is now live at `https://uptime-monitor.<your-subdomain>.workers.dev`,
 and visiting it redirects you through your identity provider first.
+
+## Cloudflare Credentials
+
+Zone discovery only calls `GET /zones`, so the credential it needs is an **API
+token scoped to `Zone:Read`** — create one under
+[My Profile > API Tokens](https://dash.cloudflare.com/profile/api-tokens).
+
+Do not use a Global API Key. It grants full control of the account (DNS, R2,
+Workers, Access, billing), and credentials added through **Settings > Cloudflare
+Accounts** are stored in D1 in plain text — so anything able to read the
+database would inherit whatever that credential can do. A scoped token limits
+that to listing zone names.
+
+Existing installs that predate this keep working: rows carry an `auth_type` of
+`global_key` and still authenticate with `X-Auth-Email`/`X-Auth-Key`. To move
+one over, create a `Zone:Read` token and update the row:
+
+```sql
+UPDATE cf_accounts SET api_key = '<token>', auth_type = 'token' WHERE id = <id>;
+```
 
 ## Dashboard Authentication
 

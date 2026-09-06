@@ -200,3 +200,57 @@ describe('checks limit is bounded', () => {
     expect(resp.status).toBe(200);
   });
 });
+
+describe('Cloudflare credential scope', () => {
+  it('sends a scoped token as a Bearer header, never as a Global Key header', async () => {
+    await env.DB.prepare(
+      "INSERT INTO cf_accounts (name, email, api_key, auth_type) VALUES ('T', 't@example.com', 'cfut_scoped_token', 'token')"
+    ).run();
+
+    const seen: Array<Record<string, string>> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const headers: Record<string, string> = {};
+      new Headers(init?.headers).forEach((v, k) => { headers[k] = v; });
+      seen.push(headers);
+      return new Response(
+        JSON.stringify({ success: true, result: [], result_info: { total_pages: 1 } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as typeof fetch;
+
+    const { syncZones } = await import('../cron/discovery');
+    await syncZones(testEnv);
+    globalThis.fetch = originalFetch;
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen[0]['authorization']).toBe('Bearer cfut_scoped_token');
+    expect(seen[0]['x-auth-key']).toBeUndefined();
+    expect(seen[0]['x-auth-email']).toBeUndefined();
+  });
+
+  it('still authenticates a legacy Global Key row the old way', async () => {
+    await env.DB.prepare(
+      "INSERT INTO cf_accounts (name, email, api_key, auth_type) VALUES ('L', 'l@example.com', 'legacykey', 'global_key')"
+    ).run();
+
+    const seen: Array<Record<string, string>> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers: Record<string, string> = {};
+      new Headers(init?.headers).forEach((v, k) => { headers[k] = v; });
+      seen.push(headers);
+      return new Response(
+        JSON.stringify({ success: true, result: [], result_info: { total_pages: 1 } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as typeof fetch;
+
+    const { syncZones } = await import('../cron/discovery');
+    await syncZones(testEnv);
+    globalThis.fetch = originalFetch;
+
+    expect(seen[0]['x-auth-key']).toBe('legacykey');
+    expect(seen[0]['authorization']).toBeUndefined();
+  });
+});
