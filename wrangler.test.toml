@@ -1,0 +1,33 @@
+# Test-only config for vitest in fresh clones (wrangler.toml is gitignored).
+# Placeholder values, never deployed. Keep in sync with wrangler.toml.example.
+name = "uptime-monitor"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Version preview URLs (<version>-<worker>.<subdomain>.workers.dev) are NOT
+# covered by an Access application scoped to the main hostname, so leaving them
+# on exposes a route around Zero Trust. The Worker still verifies the Access
+# JWT and rejects those requests, but there is no reason to publish the door.
+preview_urls = false
+
+[vars]
+# Cloudflare Access (Zero Trust). Not secrets — these are public identifiers —
+# but they are account-specific, so they live here rather than in the code.
+# ACCESS_TEAM_DOMAIN: your Zero Trust team domain.
+# ACCESS_AUD: the Application Audience (AUD) tag of the Access application
+#   protecting this Worker. Zero Trust > Access > Applications > (app) > Overview.
+ACCESS_TEAM_DOMAIN = "your-team.cloudflareaccess.com"
+ACCESS_AUD = "your-access-application-aud-tag"
+
+[triggers]
+crons = [
+  "* * * * *",
+  "0 */6 * * *",
+  "0 3 * * *"
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "uptime-monitor-db"
+database_id = "your-database-id-here"  # Run: npx wrangler d1 create uptime-monitor-db
+migrations_dir = "migrations"
