@@ -14,7 +14,7 @@ done
 
 cd "$(git rev-parse --show-toplevel)"
 echo "pre-push: main deploys to production, running the local checks..."
-[ -d node_modules ] || npm ci --silent --ignore-scripts
+{ [ -f node_modules/.package-lock.json ] && [ ! package-lock.json -nt node_modules/.package-lock.json ]; } || npm ci --silent --ignore-scripts
 npm test
 [ ! -f wrangler.toml ] || npx wrangler deploy --dry-run --outdir "$(mktemp -d)" >/dev/null
 echo "pre-push: checks passed."
