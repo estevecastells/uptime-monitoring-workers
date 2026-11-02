@@ -39,6 +39,44 @@ function sleep(ms: number): Promise<void> {
 }
 
 const MAX_REDIRECTS = 5;
+const CHECK_TIMEOUT_MS = 10_000;
+// Enough for any real status page or homepage; past this we stop reading.
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Read and discard a response body, bounded in size and by the check's deadline.
+ *
+ * A monitored server is remote input: it can send headers promptly and then hold
+ * the body open, or make it huge. `await resp.arrayBuffer()` buffers all of it and,
+ * without a deadline, never settles, which stalls this batch and every later one
+ * in `runInBatches`. Chunks are dropped as they arrive, so memory stays flat.
+ */
+async function drainBody(resp: Response, signal: AbortSignal): Promise<void> {
+  if (!resp.body || resp.bodyUsed) return;
+  let reader: ReadableStreamDefaultReader<Uint8Array>;
+  try {
+    reader = resp.body.getReader();
+  } catch {
+    return; // already locked: nothing left for us to drain
+  }
+  const cancel = () => {
+    reader.cancel().catch(() => {});
+  };
+  signal.addEventListener('abort', cancel, { once: true });
+  try {
+    let bytes = 0;
+    while (!signal.aborted && bytes < MAX_BODY_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      bytes += value?.byteLength ?? 0;
+    }
+    cancel();
+  } catch {
+    // Body errors after the headers don't change the outcome (as before).
+  } finally {
+    signal.removeEventListener('abort', cancel);
+  }
+}
 
 /**
  * Follow redirects by hand so the uptime token is never replayed off-origin.
@@ -76,7 +114,7 @@ async function fetchFollowingRedirects(
     if (!location) return resp;
 
     // Drain before moving on so the connection is not left hanging.
-    await resp.arrayBuffer().catch(() => {});
+    await drainBody(resp, signal);
 
     // A Location header is remote input. Resolve it, then require http(s):
     // a redirect to another scheme is not something we should be following.
@@ -93,13 +131,14 @@ async function attemptFetch(
   uptimeToken?: string
 ): Promise<{ statusCode: number | null; responseMs: number; outcome: CheckOutcome; error: string | null }> {
   const start = Date.now();
+  // One deadline for the whole attempt: headers, redirects and the body.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
     const resp = await fetchFollowingRedirects(url, uptimeToken, controller.signal);
-    clearTimeout(timeout);
     // Drain the body to avoid hanging connections in Workers
-    await resp.arrayBuffer().catch(() => {});
+    await drainBody(resp, controller.signal);
+    clearTimeout(timeout);
     const responseMs = Date.now() - start;
     const statusCode = resp.status;
     if (statusCode >= 200 && statusCode < 400) {
@@ -107,6 +146,7 @@ async function attemptFetch(
     }
     return { statusCode, responseMs, outcome: 'down', error: `HTTP ${statusCode}` };
   } catch (e: unknown) {
+    clearTimeout(timeout);
     const responseMs = Date.now() - start;
     const message = e instanceof Error ? e.message : 'Network error';
     // Aborted requests (timeouts) are definitive failures; other network

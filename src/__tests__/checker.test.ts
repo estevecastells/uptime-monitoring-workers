@@ -248,3 +248,53 @@ describe('uptime token scoping', () => {
     expect(second!.token).toBe('super-secret-token');
   });
 });
+
+describe('response bodies are bounded', () => {
+  it('stops reading an endless body instead of buffering it', async () => {
+    const id = await insertMonitor(env.DB, 'https://huge.test', 'Huge');
+    let pulled = 0;
+    const chunk = new Uint8Array(64 * 1024);
+
+    globalThis.fetch = vi.fn().mockImplementation(async () =>
+      new Response(new ReadableStream({
+        pull(controller) {
+          pulled += chunk.byteLength;
+          controller.enqueue(chunk);
+        },
+      }), { status: 200 })
+    );
+
+    await runChecks(testEnv);
+
+    const checks = await getLastNChecks(testEnv, id, 1);
+    expect(checks[0].is_up).toBe(1);
+    expect(checks[0].status_code).toBe(200);
+    // Capped at a few MiB, not read forever.
+    expect(pulled).toBeLessThan(4 * 1024 * 1024);
+  });
+
+  it('a body that never finishes cannot stall later batches', async () => {
+    // Monitors run in name order, ten per batch: the stalled one is in the
+    // first batch and "Z later" lands in the second.
+    const stalled = await insertMonitor(env.DB, 'https://stalled.test', 'A stalled');
+    for (let i = 0; i < 9; i++) await insertMonitor(env.DB, `https://ok-${i}.test`, `M ${i}`);
+    const later = await insertMonitor(env.DB, 'https://later.test', 'Z later');
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) =>
+      url.includes('stalled')
+        // Headers arrive at once; the body never sends a byte or closes.
+        ? new Response(new ReadableStream({ start() {} }), { status: 200 })
+        : new Response('OK', { status: 200 })
+    );
+
+    await runChecks(testEnv);
+
+    const laterChecks = await getLastNChecks(testEnv, later, 1);
+    expect(laterChecks).toHaveLength(1);
+    expect(laterChecks[0].is_up).toBe(1);
+    // The stalled check still settles, with its status from the headers.
+    const stalledChecks = await getLastNChecks(testEnv, stalled, 1);
+    expect(stalledChecks).toHaveLength(1);
+    expect(stalledChecks[0].status_code).toBe(200);
+  }, 20_000);
+});
